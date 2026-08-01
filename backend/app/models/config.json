@@ -1,0 +1,1 @@
+{"classes": ["Positive", "Negative"], "mapping": {"happy": 0, "neutral": 0, "sad": 1, "disgust": 1}}

@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Login | EmoTutor AI</title>
+
+    <link rel="stylesheet" href="login.css">
+</head>
+<body>
+
+<div class="auth-container">
+
+    <div class="auth-card">
+
+        <h1>🧠 Emotion Aware AI Tutor</h1>
+        <h2></h2>
+        <p>Login to continue your learning journey.</p>
+
+        <input
+            type="email"
+            id="email"
+            placeholder="Enter Email"
+            autocomplete="email">
+
+        <input
+            type="password"
+            id="password"
+            placeholder="Enter Password"
+            autocomplete="current-password">
+
+        <button type="button" onclick="login()">
+            Login
+        </button>
+
+        <p class="bottom-text">
+            Don't have an account?
+            <a href="signup.html">Create Account</a>
+        </p>
+
+    </div>
+
+</div>
+
+<script src="auth.js"></script>
+
+</body>
+</html>

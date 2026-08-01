@@ -1,0 +1,25 @@
+# Environment variables / secrets
+.env
+backend/.env
+
+# Python virtual environment
+venv/
+backend/venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Uploaded user files
+backend/uploads/*
+backend/audio/*
+
+# Local database backup
+emotutor_backup.sql
+
+# IDE
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db

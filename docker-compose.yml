@@ -1,0 +1,40 @@
+services:
+
+  db:
+    image: postgres:16
+    container_name: emotutor-db
+
+    environment:
+      POSTGRES_DB: emotutor
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+
+  backend:
+    build:
+      context: ./backend
+
+    container_name: emotutor-backend
+
+    ports:
+      - "8000:8000"
+
+    env_file:
+      - ./backend/.env
+
+    depends_on:
+      - db
+
+    volumes:
+      - ./backend/uploads:/app/uploads
+      - ./backend/audio:/app/audio
+
+
+volumes:
+  postgres_data:

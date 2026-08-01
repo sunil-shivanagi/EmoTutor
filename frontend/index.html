@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>EmoTutor</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="app">
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div class="logo">
+            <h2><span class="logo-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5-10-5z"></path><path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"></path></svg></span> AI EmoTutor</h2>
+            <span id="welcome-user">Your Personal Tutor</span>
+        </div>
+
+        <div class="nav">
+            <button class="nav-btn active" onclick="createNewSession()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+                New Chat
+            </button>
+            <button class="nav-btn" onclick="toggleTheme()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                Settings
+            </button>
+            <div class="pdf-section">
+                <h3>📚 My PDFs</h3>
+                <div id="pdf-list"></div>
+            </div>
+        </div>
+
+        <!-- Camera Card -->
+        <div class="camera-box">
+            <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg> Live Camera</h3>
+            <video
+                id="video"
+                autoplay
+                playsinline
+                class="camera-preview">
+            </video>
+            <div class="emotion-card">
+                <span>Current Emotion</span>
+                <button class="emotion-btn">
+                    <span class="icon-smile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M8 14s1.5 2 4 2 4-2 4-2"></path><line x1="9" y1="9" x2="9.01" y2="9"></line><line x1="15" y1="9" x2="15.01" y2="9"></line></svg></span>
+                    <span class="emotion-text">Neutral</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="session-list" id="session-list">
+            <input
+        type="text"
+        id="search-chat"
+        placeholder="🔍 Search chats..."
+        onkeyup="searchChats()">
+            <h3>Recent Chats</h3>
+            <div id="sessions-container">
+        </div>
+</div>
+
+
+    </div>
+
+
+    <!-- Main -->
+    <div class="main">
+        <button class="logout-btn" onclick="logoutUser()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+            Logout
+        </button>
+        <!-- Chat Area -->
+        <div id="chat-box" class="chat-box">
+            <div class="welcome">
+                <h2>Hello! I'm your AI Tutor</h2>
+                <p>I detect how you're feeling and adapt explanations.</p>
+            </div>
+        </div>
+
+
+        <!-- Quiz Button (hidden until PDF uploaded) — INSIDE .main -->
+        <div id="quiz-trigger" style="display:block; padding:8px 10px; background:#f0eeff; border-top:1px solid #ddd;">
+            <button id="quiz-trigger-btn" onclick="openQuizModal()"
+                style="background:#2563eb; color:white; border:none;
+                    padding:8px 18px; border-radius:20px; cursor:pointer;
+                    font-size:13px;">
+                📝 Generate Quiz
+            </button>
+            <button onclick="openGamePicker()"
+                style="background:#e84393; color:white; border:none;
+                    padding:8px 18px; border-radius:20px; cursor:pointer;
+                    font-size:13px;">
+                🎮 Play Game
+            </button>
+
+            <button onclick="generateNotes()"
+    style="
+        background:#16a34a;
+        color:white;
+        border:none;
+        padding:8px 18px;
+        border-radius:20px;
+        cursor:pointer;
+        font-size:13px;">
+    📝 Generate Notes
+</button>
+        </div>
+
+
+        <!-- Input Area -->
+        <div class="input-area">
+            <label class="upload-btn">
+                <span class="upload-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg></span>
+                <input
+                    type="file"
+                    id="pdf-file"
+                    accept="application/pdf"
+                    hidden>
+            </label>
+            <input
+                id="user-input"
+                type="text"
+                placeholder="Ask anything about your study material...">
+            <button
+                type="button"
+                class="upload-pdf-btn"
+                onclick="uploadPDF()">
+                Upload
+            </button>
+            <button
+                class="send-btn"
+                onclick="sendMessage()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+            </button>
+        </div>
+    </div><!-- end .main -->
+</div><!-- end .app -->
+
+<!-- ===== QUIZ MODAL ===== -->
+<div id="quiz-modal" style="display:none; position:fixed; top:0; left:0;
+     width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:1000;
+     justify-content:center; align-items:center;">
+
+
+    <div style="background:white; border-radius:16px; padding:30px;
+                width:600px; max-width:90%; max-height:85vh;
+                overflow-y:auto; position:relative;">
+
+
+        <!-- Close -->
+        <button onclick="closeQuizModal()"
+            style="position:absolute; top:15px; right:15px;
+                   background:none; border:none; font-size:20px; cursor:pointer;">
+            ✕
+        </button>
+
+
+        <!-- Screen 1: Setup -->
+        <div id="quiz-setup">
+            <h2 style="margin-bottom:5px;">📝 Generate Quiz</h2>
+            <p id="quiz-context-info" style="color:#2563eb; font-size:13px; margin-bottom:20px;"></p>
+
+
+            <!-- Source Selection -->
+            <label style="font-weight:bold;">Quiz Source</label><br>
+            <div id="quiz-source-options" style="margin:10px 0 20px;">
+
+
+            <label id="src-chat-label" style="display:none; align-items:flex-start;
+       gap:8px; padding:10px; border:2px solid #eee; border-radius:8px;
+       margin-bottom:8px; cursor:pointer; flex-direction:column;">
+    <div style="display:flex; align-items:center; gap:8px;">
+        <input type="radio" name="quiz-source" value="chat" style="margin:0;">
+        <div>
+            <strong>💬 From Chat Topic</strong>
+            <p style="margin:2px 0 0; font-size:12px; color:gray;">
+                Pick a topic you discussed
+            </p>
+        </div>
+    </div>
+    <!-- Topic dropdown renders here -->
+    <div id="chat-topic-list" style="width:100%;"></div>
+</label>
+
+
+                <label id="src-pdf-label" style="display:none; align-items:center;
+                        gap:8px; padding:10px; border:2px solid #eee; border-radius:8px;
+                        margin-bottom:8px; cursor:pointer;">
+                    <input type="radio" name="quiz-source" value="pdf" style="margin:0;">
+                    <div>
+                        <strong>📄 From Uploaded PDF</strong>
+                        <p id="pdf-name-preview" style="margin:2px 0 0; font-size:12px; color:gray;"></p>
+                    </div>
+                </label>
+
+
+                <label style="display:flex; align-items:center;
+                        gap:8px; padding:10px; border:2px solid #eee; border-radius:8px;
+                        margin-bottom:8px; cursor:pointer;">
+                    <input type="radio" name="quiz-source" value="custom" style="margin:0;" checked>
+                    <div>
+                        <strong>✏️ Custom Topic</strong>
+                        <p style="margin:2px 0 0; font-size:12px; color:gray;">Type any topic you want</p>
+                    </div>
+                </label>
+
+
+            </div>
+
+
+            <!-- Custom topic input (shown when custom selected) -->
+            <div id="custom-topic-div">
+                <label>Enter Topic</label><br>
+                <input id="quiz-topic" type="text"
+                        placeholder="e.g. Machine Learning, World War 2..."
+                        style="width:100%; padding:10px; margin:8px 0 16px;
+                            border:1px solid #ddd; border-radius:8px;
+                            font-size:14px; box-sizing:border-box;"/>
+            </div>
+
+
+            <label>Question Type</label><br>
+            <select id="quiz-type"
+                style="width:100%; padding:10px; margin:8px 0 16px;
+                     border:1px solid #ddd; border-radius:8px; font-size:14px;">
+                <option value="mcq">Multiple Choice (MCQ)</option>
+                <option value="truefalse">True / False</option>
+                <option value="shortanswer">Short Answer</option>
+                <option value="mix">Mix of All</option>
+            </select>
+
+
+            <label>Number of Questions</label><br>
+            <select id="quiz-num"
+                style="width:100%; padding:10px; margin:8px 0 20px;
+                     border:1px solid #ddd; border-radius:8px; font-size:14px;">
+                <option value="3">3 Questions</option>
+                <option value="5" selected>5 Questions</option>
+                <option value="10">10 Questions</option>
+            </select>
+
+
+            <button onclick="startQuiz()"
+                style="width:100%; padding:12px; background:#2563eb;
+                    color:white; border:none; border-radius:8px;
+                    font-size:16px; cursor:pointer;">
+                🚀 Generate Quiz
+            </button>
+
+
+            <div id="quiz-loading"
+                style="display:none; text-align:center; margin-top:15px; color:gray;">
+                ⏳ Generating quiz, please wait...
+            </div>
+        </div>
+
+
+        <!-- Screen 2: Questions -->
+        <div id="quiz-questions" style="display:none;">
+            <h2 style="margin-bottom:5px;">📝 Quiz</h2>
+            <p id="quiz-meta" style="color:gray; margin-bottom:20px; font-size:13px;"></p>
+            <div id="questions-container"></div>
+            <button onclick="submitQuiz()"
+                style="width:100%; padding:12px; background:#4CAF50;
+                       color:white; border:none; border-radius:8px;
+                       font-size:16px; cursor:pointer; margin-top:20px;">
+                ✅ Submit Quiz
+            </button>
+        </div>
+
+
+        <!-- Screen 3: Results -->
+        <div id="quiz-results" style="display:none; text-align:center;">
+            <h2>🎉 Quiz Complete!</h2>
+            <div id="score-display" style="font-size:56px; font-weight:bold; margin:20px 0; color:#2563eb;"></div>
+            <p id="score-message" style="font-size:16px; color:gray;"></p>
+            <div id="answers-review" style="text-align:left; margin-top:20px;"></div>
+            <button onclick="retakeQuiz()"
+                style="margin-top:20px; padding:12px 24px; background:#2563eb;
+                       color:white; border:none; border-radius:8px;
+                       font-size:14px; cursor:pointer;">
+                🔁 Try Again
+            </button>
+        </div>
+
+
+    </div>
+</div>
+
+
+<!-- ===== DROWSY GAME POPUP ===== -->
+<div id="drowsy-popup" style="display:none; position:fixed; bottom:30px; right:30px;
+     background:white; padding:20px; border-radius:16px; z-index:9999;
+     box-shadow:0 8px 30px rgba(0,0,0,0.2); width:300px; text-align:center;">
+    <p style="font-size:22px; margin:0 0 8px;">😴 You seem drowsy!</p>
+    <p style="color:gray; font-size:13px; margin:0 0 16px;">
+        Let's wake up your brain with a quick game!
+    </p>
+    <button onclick="launchGame('hangman')"
+        style="width:100%; margin-bottom:8px; padding:10px; background:#2563eb;
+               color:white; border:none; border-radius:8px; cursor:pointer; font-size:14px;">
+        🔤 Play Hangman
+    </button>
+    <button onclick="launchGame('crossword')"
+        style="width:100%; margin-bottom:8px; padding:10px; background:#1B6CA8;
+               color:white; border:none; border-radius:8px; cursor:pointer; font-size:14px;">
+        ✏️ Play Crossword
+    </button>
+    <button onclick="document.getElementById('drowsy-popup').style.display='none'"
+        style="width:100%; padding:8px; background:#eee; border:none;
+               border-radius:8px; cursor:pointer; font-size:13px; color:#555;">
+        I'm fine, continue
+    </button>
+</div>
+
+
+<!-- ===== HANGMAN MODAL ===== -->
+<div id="hangman-modal" style="display:none; position:fixed; top:0; left:0;
+     width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:2000;
+     justify-content:center; align-items:center;">
+    <div style="background:white; border-radius:16px; padding:30px;
+                width:500px; max-width:90%; position:relative; text-align:center;">
+        <button onclick="closeGame('hangman')"
+            style="position:absolute; top:15px; right:15px; background:none;
+                   border:none; font-size:20px; cursor:pointer;">✕</button>
+        <h2>🔤 Hangman</h2>
+        <p id="hangman-hint" style="color:#2563eb; font-size:14px; margin:10px 0;"></p>
+
+
+        <!-- Hangman Drawing -->
+        <canvas id="hangman-canvas" width="200" height="200"
+            style="border:1px solid #eee; border-radius:8px; margin:10px auto; display:block;">
+        </canvas>
+
+
+        <!-- Word Display -->
+        <div id="hangman-word" style="font-size:28px; letter-spacing:12px;
+             font-weight:bold; margin:16px 0; color:#2E4057;"></div>
+
+
+        <!-- Wrong letters -->
+        <p style="color:#f44336; font-size:13px;">
+            Wrong: <span id="hangman-wrong"></span>
+        </p>
+
+
+        <!-- Keyboard -->
+        <div id="hangman-keyboard"
+            style="display:flex; flex-wrap:wrap; justify-content:center;
+                   gap:6px; margin-top:14px; max-width:380px; margin-inline:auto;">
+        </div>
+
+
+        <p id="hangman-status" style="font-size:16px; font-weight:bold;
+           margin-top:16px; color:#4CAF50;"></p>
+
+
+        <button id="hangman-next" onclick="nextHangmanWord()"
+            style="display:none; margin-top:10px; padding:10px 24px;
+                   background:#2563eb; color:white; border:none;
+                   border-radius:8px; cursor:pointer;">
+            Next Word ➡️
+        </button>
+    </div>
+</div>
+
+
+<!-- ===== CROSSWORD MODAL ===== -->
+<div id="crossword-modal" style="display:none; position:fixed; top:0; left:0;
+     width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:2000;
+     justify-content:center; align-items:center;">
+    <div style="background:white; border-radius:16px; padding:30px;
+                width:680px; max-width:95%; max-height:90vh;
+                overflow-y:auto; position:relative;">
+        <button onclick="closeGame('crossword')"
+            style="position:absolute; top:15px; right:15px; background:none;
+                   border:none; font-size:20px; cursor:pointer;">✕</button>
+        <h2 style="text-align:center;">✏️ Crossword Puzzle</h2>
+        <p style="text-align:center; color:gray; font-size:13px; margin-bottom:16px;">
+            Fill in the words based on the clues below
+        </p>
+
+
+        <!-- Grid -->
+        <div id="crossword-grid"
+            style="display:inline-block; margin:0 auto 20px;
+                   display:flex; justify-content:center;">
+        </div>
+
+
+        <!-- Clues -->
+        <div style="display:flex; gap:20px; flex-wrap:wrap;">
+            <div style="flex:1; min-width:200px;">
+                <h4 style="color:#1B6CA8;">➡️ Across</h4>
+                <div id="crossword-across"></div>
+            </div>
+            <div style="flex:1; min-width:200px;">
+                <h4 style="color:#2563eb;">⬇️ Down</h4>
+                <div id="crossword-down"></div>
+            </div>
+        </div>
+
+
+        <button onclick="checkCrossword()"
+            style="width:100%; margin-top:20px; padding:12px; background:#4CAF50;
+                   color:white; border:none; border-radius:8px;
+                   font-size:15px; cursor:pointer;">
+            ✅ Check Answers
+        </button>
+        <div id="crossword-result"
+            style="text-align:center; margin-top:12px; font-size:16px;
+                   font-weight:bold; color:#4CAF50;">
+        </div>
+    </div>
+</div>
+
+
+
+<div id="notes-modal"
+     style="
+        display:none;
+        position:fixed;
+        inset:0;
+        background:rgba(0,0,0,.6);
+        justify-content:center;
+        align-items:center;
+        z-index:9999;">
+
+    <div style="
+        background:white;
+        width:70%;
+        max-height:80vh;
+        overflow:auto;
+        padding:30px;
+        border-radius:15px;
+        position:relative;">
+
+        <button
+            onclick="closeNotesModal()"
+            style="
+                position:absolute;
+                right:20px;
+                top:15px;">
+            ✕
+        </button>
+
+        <h2>Study Notes</h2>
+
+        <div id="notes-content"></div>
+        <br>
+
+<button onclick="downloadNotesPDF()"
+        style="
+        background:#2563eb;
+        color:white;
+        border:none;
+        padding:10px 20px;
+        border-radius:8px;
+        cursor:pointer;">
+    📥 Download PDF
+</button>
+
+    </div>
+
+</div>
+<!-- Markdown -->
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+
+<!-- Highlight.js -->
+<link rel="stylesheet"
+href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="auth.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
