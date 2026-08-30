@@ -1,25 +1,25 @@
-from fastapi import APIRouter, UploadFile, File
-from pydantic import BaseModel
-import uuid
-
-from app.services.pdf_service import extract_text_from_pdf, search_chunks
-from app.services.llm_service import generate_reply, clean_text
-from app.services.tutor_service import start_study_session
-
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
 from sqlalchemy.orm import Session
-from fastapi import Depends
+
+import uuid
+import os
+import shutil
+
+from app.services.pdf_service import extract_text_from_pdf
 
 from app.database import get_db
 from app.models.user import User
 from app.models.pdf import PDF
 from app.auth.dependencies import get_current_user
 
-import os
-import shutil
 
 router = APIRouter()
 
-# 📤 Upload PDF
+
+# =========================================================
+# UPLOAD PDF
+# =========================================================
+
 @router.post("/upload-pdf")
 async def upload_pdf(
     file: UploadFile = File(...),
@@ -27,13 +27,67 @@ async def upload_pdf(
     current_user: User = Depends(get_current_user)
 ):
 
-    os.makedirs("uploads", exist_ok=True)
+    # -----------------------------------------------------
+    # Validate file
+    # -----------------------------------------------------
 
-    filename = f"{uuid.uuid4()}_{file.filename}"
-    filepath = os.path.join("uploads", filename)
+    if not file.filename:
+        raise HTTPException(
+            status_code=400,
+            detail="No file selected."
+        )
 
-    with open(filepath, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    if not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(
+            status_code=400,
+            detail="Only PDF files are supported."
+        )
+
+    # -----------------------------------------------------
+    # Create uploads directory
+    # -----------------------------------------------------
+
+    os.makedirs(
+        "uploads",
+        exist_ok=True
+    )
+
+    # -----------------------------------------------------
+    # Create unique filename
+    # -----------------------------------------------------
+
+    filename = (
+        f"{uuid.uuid4()}_{file.filename}"
+    )
+
+    filepath = os.path.join(
+        "uploads",
+        filename
+    )
+
+    # -----------------------------------------------------
+    # Save PDF
+    # -----------------------------------------------------
+
+    try:
+
+        with open(filepath, "wb") as buffer:
+
+            shutil.copyfileobj(
+                file.file,
+                buffer
+            )
+
+    except Exception as e:
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Could not save PDF: {str(e)}"
+        )
+
+    # -----------------------------------------------------
+    # Create PDF database record
+    # -----------------------------------------------------
 
     pdf = PDF(
         user_id=current_user.id,
@@ -45,199 +99,98 @@ async def upload_pdf(
     db.commit()
     db.refresh(pdf)
 
-    with open(filepath, "rb") as pdf_file:
-        num_chunks = extract_text_from_pdf(
-            pdf_file,
-            db,
-            pdf.id
+    # -----------------------------------------------------
+    # Extract + chunk + embed
+    # -----------------------------------------------------
+
+    try:
+
+        with open(
+            filepath,
+            "rb"
+        ) as pdf_file:
+
+            num_chunks = extract_text_from_pdf(
+                pdf_file,
+                db,
+                pdf.id
+            )
+
+    except Exception as e:
+
+        # Remove database record if processing failed
+        db.delete(pdf)
+        db.commit()
+
+        # Remove saved file
+        if os.path.exists(filepath):
+            os.remove(filepath)
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Could not process PDF: {str(e)}"
+        )
+
+    # -----------------------------------------------------
+    # Make sure PDF actually contained usable text
+    # -----------------------------------------------------
+
+    if num_chunks == 0:
+
+        db.delete(pdf)
+        db.commit()
+
+        if os.path.exists(filepath):
+            os.remove(filepath)
+
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Could not extract usable text "
+                "from this PDF."
+            )
+        )
+
+    print(
+        "Uploaded PDF ID:",
+        pdf.id
     )
-    print("Uploaded PDF ID:", pdf.id)
-    print("Chunks created:", num_chunks)
+
+    print(
+        "Chunks created:",
+        num_chunks
+    )
+
+    # -----------------------------------------------------
+    # Response
+    # -----------------------------------------------------
 
     return {
         "message": "PDF uploaded successfully",
         "pdf_id": pdf.id,
+        "filename": pdf.filename,
         "chunks_created": num_chunks
     }
 
 
-# ❓ Request model
-class QueryRequest(BaseModel):
-    pdf_id: int
-    question: str
+# =========================================================
+# GET USER PDFs
+# =========================================================
 
-
-# ❓ Ask question from PDF
-@router.post("/ask-pdf")
-def ask_pdf(
-    request: QueryRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-
-    pdf = db.query(PDF).filter(
-        PDF.id == request.pdf_id,
-        PDF.user_id == current_user.id
-    ).first()
-
-    if pdf is None:
-        return {
-            "message": "PDF not found."
-        }
-    print("=" * 50)
-    print("PDF ID:", request.pdf_id)
-    print("Question:", request.question)
-    context = search_chunks(
-        request.question,
-        db,
-        request.pdf_id
-    )
-    print("\nRetrieved Context:\n")
-    print(context)
-    print("=" * 50)
-
-    # ✅ CASE 1: answer found in uploaded PDF
-    if context and len(context.strip()) > 50:
-
-        prompt = f"""
-You are an AI tutor answering ONLY from the uploaded PDF.
-
-Rules:
-
-1. Read the CONTEXT carefully.
-2. Answer ONLY using the information present in the CONTEXT.
-3. If the answer is not present in the CONTEXT, reply exactly:
-
-"I couldn't find this information in the uploaded PDF."
-
-4. Do NOT use your own knowledge.
-5. If the question asks about the whole PDF, summarize the PDF.
-
---------------------
-CONTEXT
-
-{context}
-
---------------------
-
-QUESTION
-
-{request.question}
-"""
-
-        messages = [
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ]
-
-        answer = generate_reply(messages, "neutral")
-        answer = clean_text(answer)
-
-        # create reading session
-        session_id = str(uuid.uuid4())
-        reading_time = start_study_session(session_id, answer)
-
-        return {
-            "answer": answer,
-            "source": "pdf",
-            "session_id": session_id,
-            "reading_time": reading_time
-        }
-
-    # ✅ CASE 2: fallback to AI explanation
-    else:
-
-        prompt = f"""
-You are a helpful AI tutor.
-
-Answer the following question clearly with examples
-so that a beginner can understand.
-
-Question:
-{request.question}
-"""
-
-        messages = [
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ]
-
-        answer = generate_reply(messages, "neutral")
-        answer = clean_text(answer)
-
-        # create reading session
-        session_id = str(uuid.uuid4())
-        reading_time = start_study_session(session_id, answer)
-
-        return {
-            "answer": answer,
-            "source": "ai",
-            "session_id": session_id,
-            "reading_time": reading_time
-        }
-
-# 📂 Get all PDFs uploaded by current user
 @router.get("/my-pdfs")
 def get_my_pdfs(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
 
-    pdfs = db.query(PDF).filter(
-        PDF.user_id == current_user.id
-    ).order_by(PDF.uploaded_at.desc()).all()
-
-    return [
-        {
-            "id": pdf.id,
-            "filename": pdf.filename,
-            "uploaded_at": pdf.uploaded_at
-        }
-        for pdf in pdfs
-    ]
-
-@router.delete("/delete-pdf/{pdf_id}")
-def delete_pdf(
-    pdf_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-
-    pdf = db.query(PDF).filter(
-        PDF.id == pdf_id,
-        PDF.user_id == current_user.id
-    ).first()
-
-    if pdf is None:
-        return {
-            "message": "PDF not found."
-        }
-
-    if os.path.exists(pdf.filepath):
-        os.remove(pdf.filepath)
-
-    db.delete(pdf)
-    db.commit()
-
-    return {
-        "message": "PDF deleted successfully."
-    }
-
-
-@router.get("/pdfs")
-def get_user_pdfs(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-
     pdfs = (
         db.query(PDF)
-        .filter(PDF.user_id == current_user.id)
-        .order_by(PDF.uploaded_at.desc())
+        .filter(
+            PDF.user_id == current_user.id
+        )
+        .order_by(
+            PDF.uploaded_at.desc()
+        )
         .all()
     )
 
@@ -249,3 +202,83 @@ def get_user_pdfs(
         }
         for pdf in pdfs
     ]
+
+
+# =========================================================
+# GET USER PDFs
+# =========================================================
+
+@router.get("/pdfs")
+def get_user_pdfs(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+
+    pdfs = (
+        db.query(PDF)
+        .filter(
+            PDF.user_id == current_user.id
+        )
+        .order_by(
+            PDF.uploaded_at.desc()
+        )
+        .all()
+    )
+
+    return [
+        {
+            "id": pdf.id,
+            "filename": pdf.filename,
+            "uploaded_at": pdf.uploaded_at
+        }
+        for pdf in pdfs
+    ]
+
+
+# =========================================================
+# DELETE PDF
+# =========================================================
+
+@router.delete("/delete-pdf/{pdf_id}")
+def delete_pdf(
+    pdf_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+
+    pdf = (
+        db.query(PDF)
+        .filter(
+            PDF.id == pdf_id,
+            PDF.user_id == current_user.id
+        )
+        .first()
+    )
+
+    if pdf is None:
+
+        raise HTTPException(
+            status_code=404,
+            detail="PDF not found."
+        )
+
+    # -----------------------------------------------------
+    # Delete physical file
+    # -----------------------------------------------------
+
+    if os.path.exists(pdf.filepath):
+        os.remove(pdf.filepath)
+
+    # -----------------------------------------------------
+    # Delete database record
+    #
+    # PDFChunk uses ON DELETE CASCADE, so its chunks
+    # will also be deleted.
+    # -----------------------------------------------------
+
+    db.delete(pdf)
+    db.commit()
+
+    return {
+        "message": "PDF deleted successfully."
+    }

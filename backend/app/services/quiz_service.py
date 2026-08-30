@@ -1,144 +1,324 @@
 from app.services.pdf_service import search_chunks
 from app.config import GROQ_API_KEY
+
 from groq import Groq
+
+from sqlalchemy.orm import Session
+
 import json
 import re
+
 
 client = Groq(api_key=GROQ_API_KEY)
 
 
-def get_format_instructions(quiz_type: str, num_questions: int) -> str:
+# =========================================================
+# FORMAT INSTRUCTIONS
+# =========================================================
 
-    num = str(num_questions)
+def get_format_instructions(
+    quiz_type: str,
+    num_questions: int
+) -> str:
 
     if quiz_type == "mcq":
+
         return f"""
-Generate exactly {num} multiple choice questions.
-Return ONLY a JSON array like this:
+Generate exactly {num_questions} multiple choice questions.
+
+Return ONLY a JSON array:
+
 [
   {{
     "type": "mcq",
     "question": "Question here?",
-    "options": {{"A": "option1", "B": "option2", "C": "option3", "D": "option4"}},
+    "options": {{
+      "A": "option1",
+      "B": "option2",
+      "C": "option3",
+      "D": "option4"
+    }},
     "answer": "A"
   }}
-]"""
+]
+"""
 
     elif quiz_type == "truefalse":
+
         return f"""
-Generate exactly {num} true/false questions.
-Return ONLY a JSON array like this:
+Generate exactly {num_questions} true/false questions.
+
+Return ONLY a JSON array:
+
 [
   {{
     "type": "truefalse",
     "question": "Statement here.",
     "answer": "True"
   }}
-]"""
+]
+"""
 
     elif quiz_type == "shortanswer":
+
         return f"""
-Generate exactly {num} short answer questions.
-Return ONLY a JSON array like this:
+Generate exactly {num_questions} short answer questions.
+
+Return ONLY a JSON array:
+
 [
   {{
     "type": "shortanswer",
     "question": "Question here?",
     "answer": "Expected answer here"
   }}
-]"""
+]
+"""
 
-    else:  # mix
+    else:
+
         return f"""
-Generate exactly {num} mixed questions (mix of mcq, truefalse, shortanswer).
-Return ONLY a JSON array like this:
-[
-  {{
-    "type": "mcq",
-    "question": "Question?",
-    "options": {{"A": "opt1", "B": "opt2", "C": "opt3", "D": "opt4"}},
-    "answer": "A"
-  }},
-  {{
-    "type": "truefalse",
-    "question": "Statement.",
-    "answer": "True"
-  }},
-  {{
-    "type": "shortanswer",
-    "question": "Question?",
-    "answer": "Answer"
-  }}
-]"""
+Generate exactly {num_questions} mixed questions.
 
+Mix:
+- mcq
+- truefalse
+- shortanswer
+
+Return ONLY a JSON array.
+
+Each object must contain the correct fields
+for its question type.
+"""
+
+
+# =========================================================
+# CALL GROQ
+# =========================================================
 
 def call_llm(prompt: str) -> list:
-    """Call Groq and return parsed JSON list"""
+
     try:
+
         response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+
+            model="openai/gpt-oss-120b",
+
             messages=[
-                {"role": "system", "content": "You are a quiz generator. Return only valid JSON arrays."},
-                {"role": "user",   "content": prompt}
+                {
+                    "role": "system",
+                    "content": (
+                        "You are an expert educational quiz "
+                        "generator. Return ONLY valid JSON."
+                    )
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
             ],
-            temperature=0.7
+
+            temperature=0.5,
+
+            max_tokens=1500
         )
-        raw = response.choices[0].message.content.strip()
-        raw = re.sub(r"```json|```", "", raw).strip()
-        return json.loads(raw)
+
+        raw = (
+            response
+            .choices[0]
+            .message
+            .content
+            .strip()
+        )
+
+        # Remove markdown fences
+        raw = re.sub(
+            r"```json|```",
+            "",
+            raw
+        ).strip()
+
+        quiz = json.loads(raw)
+
+        if not isinstance(quiz, list):
+
+            print(
+                "Quiz error: "
+                "LLM did not return a JSON list."
+            )
+
+            return []
+
+        return quiz
 
     except Exception as e:
-        print("Quiz generation error:", e)
+
+        print(
+            "Quiz generation error:",
+            e
+        )
+
         return []
 
 
-def generate_quiz(topic: str, quiz_type: str, num_questions: int, use_pdf: bool = True):
+# =========================================================
+# GENERATE QUIZ
+# =========================================================
 
-    # ── PDF mode ──────────────────────────────────────────────
-    if use_pdf:
-        from app.services.pdf_service import chunks as pdf_chunks
+def generate_quiz(
+    topic: str,
+    quiz_type: str,
+    num_questions: int,
+    use_pdf: bool = False,
+    pdf_id: int | None = None,
+    db: Session | None = None
+) -> list:
 
-        if pdf_chunks and len(pdf_chunks) > 0:
+    # -----------------------------------------------------
+    # Validate topic
+    # -----------------------------------------------------
 
-            if topic:
-                # Student was learning a specific topic → search PDF for it
-                context = search_chunks(topic)
-            else:
-                # No specific topic → use broad PDF content
-                context = " ".join(pdf_chunks[:6])[:3000]
+    if not topic or not topic.strip():
 
-            if context and len(context.strip()) > 50:
-                prompt = f"""
-You are a quiz generator for students.
+        return []
 
-Content from PDF:
+    topic = topic.strip()
+
+    # -----------------------------------------------------
+    # Validate question count
+    # -----------------------------------------------------
+
+    num_questions = max(
+        1,
+        min(num_questions, 20)
+    )
+
+    context = ""
+
+    # =====================================================
+    # PDF MODE
+    # =====================================================
+
+    if (
+        use_pdf
+        and pdf_id is not None
+        and db is not None
+    ):
+
+        print("=" * 60)
+        print("QUIZ PDF SEARCH")
+        print("Topic:", topic)
+        print("PDF ID:", pdf_id)
+        print("=" * 60)
+
+        search_result = search_chunks(
+            topic,
+            db,
+            pdf_id
+        )
+
+        context = search_result.get(
+            "context",
+            ""
+        )
+
+        print(
+            "Quiz PDF relevance:",
+            search_result.get("score", 0)
+        )
+
+        # -------------------------------------------------
+        # PDF context found
+        # -------------------------------------------------
+
+        if context and len(context.strip()) > 50:
+
+            prompt = f"""
+You are an expert educational quiz generator.
+
+The student is currently learning:
+
+{topic}
+
+The following information was retrieved from
+the student's selected PDF.
+
+PDF CONTENT:
+
 {context}
 
-{get_format_instructions(quiz_type, num_questions)}
+{get_format_instructions(
+    quiz_type,
+    num_questions
+)}
 
-IMPORTANT:
-- Return ONLY the JSON array
-- No extra text, no explanation, no markdown
-- Base ALL questions strictly on the PDF content above
+IMPORTANT RULES:
+
+1. Generate exactly {num_questions} questions.
+
+2. Every question must be specifically about:
+   {topic}
+
+3. Use the PDF content as the primary source.
+
+4. Do NOT create questions from unrelated parts
+   of the PDF.
+
+5. Do NOT invent information that contradicts
+   the PDF.
+
+6. Questions should test understanding, not just
+   memorization whenever possible.
+
+7. Make questions suitable for a student.
+
+8. Return ONLY the JSON array.
+
+9. Do NOT return markdown.
+
+10. Do NOT return explanations outside the JSON.
 """
-                return call_llm(prompt)
 
-    # ── Chat topic / General knowledge mode ───────────────────
-    if not topic:
-        topic = "general knowledge"
+            return call_llm(prompt)
 
-    context = f"General knowledge about: {topic}"
+    # =====================================================
+    # GENERAL TOPIC MODE
+    # =====================================================
 
     prompt = f"""
-You are a quiz generator for students.
+You are an expert educational quiz generator.
 
-Topic: {topic}
+The student is currently learning:
 
-{get_format_instructions(quiz_type, num_questions)}
+{topic}
 
-IMPORTANT:
-- Return ONLY the JSON array
-- No extra text, no explanation, no markdown
-- Base questions on the topic
+Generate a quiz specifically about:
+
+{topic}
+
+{get_format_instructions(
+    quiz_type,
+    num_questions
+)}
+
+IMPORTANT RULES:
+
+1. Generate exactly {num_questions} questions.
+
+2. Every question must be directly related to:
+   {topic}
+
+3. Test actual understanding.
+
+4. Avoid repetitive questions.
+
+5. Avoid questions about unrelated topics.
+
+6. Return ONLY the JSON array.
+
+7. Do NOT return markdown.
+
+8. Do NOT return explanations outside the JSON.
 """
+
     return call_llm(prompt)

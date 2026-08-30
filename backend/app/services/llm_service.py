@@ -1,151 +1,158 @@
 from groq import Groq
+
 from app.config import GROQ_API_KEY
+
 import re
-import json
+
 
 client = Groq(api_key=GROQ_API_KEY)
 
 
-def generate_reply(messages: list, emotion: str) -> str:
+# =========================================================
+# EMOTION INSTRUCTIONS
+# =========================================================
 
-    if emotion.lower() == "positive":
-        emotion_instruction = """
-The student appears interested and engaged.
-- Give a detailed explanation.
-- Add interesting facts when appropriate.
-- Keep the tone motivating and enthusiastic.
+def get_emotion_instruction(emotion: str) -> str:
+
+    emotion = (emotion or "neutral").lower().strip()
+
+    if emotion == "positive":
+
+        return """
+The student appears interested, engaged, and comfortable.
+
+Adapt your teaching style by:
+- Being encouraging and enthusiastic.
+- Providing a clear and reasonably detailed explanation.
+- Adding useful examples or interesting facts when they genuinely help.
+- Building on the student's interest without making the answer unnecessarily long.
 """
 
-    elif emotion.lower() == "negative":
-        emotion_instruction = """
-The student seems confused or frustrated.
-- Explain in very simple language.
-- Break the concept into small steps.
-- Encourage the student.
-- Avoid complicated words.
+    elif emotion == "negative":
+
+        return """
+The student may be confused, frustrated, or struggling.
+
+Adapt your teaching style by:
+- Using very simple and clear language.
+- Breaking difficult concepts into small steps.
+- Explaining the "why" behind the answer when useful.
+- Giving a simple example when it helps understanding.
+- Being supportive and encouraging.
+- Never making the student feel bad for not understanding something.
 """
 
-    elif emotion.lower() == "drowsy":
-        emotion_instruction = """
-The student appears tired.
-- Keep the explanation concise.
-- Focus only on the most important concepts.
-- Use a friendly and energetic tone.
-- End with a quick question to keep the student engaged.
-"""
+    elif emotion == "drowsy":
 
-    else:
-        emotion_instruction = """
-The student is in a neutral state.
-- Give a balanced explanation with moderate detail.
-"""
+        return """
+The student appears tired or less attentive.
 
-    system_prompt = f"""
-You are an expert AI Tutor helping school and college students.
-
-{emotion_instruction}
-
-Always follow these formatting rules:
-
-1. Use clear headings.
-2. Use bullet points whenever possible.
-3. Highlight important keywords using **bold**.
-4. Explain concepts in simple language.
-5. Give examples whenever useful.
-6. Use numbered steps for procedures.
-7. For programming questions, include properly formatted code blocks.
-8. Keep paragraphs short (2-4 lines).
-9. Never return one huge paragraph.
-10. End every answer with a short "Summary".
-
-Answer naturally like a professional teacher.
-"""
-
-    try:
-        conversation = [
-            {
-                "role": "system",
-                "content": system_prompt
-            }
-        ]
-
-        conversation.extend(messages)
-
-        response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
-            messages=conversation,
-            temperature=0.4,
-            max_tokens=900
-        )
-
-        return response.choices[0].message.content
-
-    except Exception as e:
-        return f"Error: {str(e)}"
-
-
-def clean_text(text: str) -> str:
-    text = re.sub(r"\*\*", "", text)
-    text = re.sub(r"```.*?```", "", text, flags=re.DOTALL)
-    text = re.sub(r"\n+", " ", text)
-    text = re.sub(r"\s+", " ", text)
-    return text.strip()
-
-
-def generate_reply_stream(messages, emotion):
-
-    if emotion.lower() == "positive":
-        emotion_instruction = """
-The student appears interested and engaged.
-- Give a detailed explanation.
-- Add interesting facts when appropriate.
-- Keep the tone motivating and enthusiastic.
-"""
-
-    elif emotion.lower() == "negative":
-        emotion_instruction = """
-The student seems confused or frustrated.
-- Explain in very simple language.
-- Break the concept into small steps.
-- Encourage the student.
-- Avoid complicated words.
-"""
-
-    elif emotion.lower() == "drowsy":
-        emotion_instruction = """
-The student appears tired.
-- Keep the explanation concise.
-- Focus only on the most important concepts.
-- Use a friendly and energetic tone.
-- End with a quick question to keep the student engaged.
+Adapt your teaching style by:
+- Keeping the explanation concise.
+- Focusing on the most important information first.
+- Using short sections and simple examples.
+- Avoiding unnecessary details.
+- Keeping the tone friendly and energetic.
+- When appropriate, finish with a short question that encourages the student to think.
 """
 
     else:
-        emotion_instruction = """
-The student is in a neutral state.
-- Give a balanced explanation with moderate detail.
+
+        return """
+The student appears to be in a neutral state.
+
+Adapt your teaching style by:
+- Giving a clear and balanced explanation.
+- Providing enough detail to understand the concept.
+- Using examples when useful.
 """
 
-    system_prompt = f"""
-You are an expert AI Tutor helping school and college students.
+
+# =========================================================
+# SYSTEM PROMPT
+# =========================================================
+
+def build_system_prompt(emotion: str) -> str:
+
+    emotion_instruction = get_emotion_instruction(emotion)
+
+    return f"""
+You are EmoTutor, an intelligent AI tutor for school and college students.
+
+Your job is to help the student understand concepts clearly rather than
+simply giving answers.
+
+IMPORTANT:
 
 {emotion_instruction}
 
-Always follow these formatting rules:
+GENERAL TEACHING RULES:
 
-1. Use clear headings.
-2. Use bullet points whenever possible.
-3. Highlight important keywords using **bold**.
-4. Explain concepts in simple language.
-5. Give examples whenever useful.
-6. Use numbered steps for procedures.
-7. For programming questions, include properly formatted code blocks.
-8. Keep paragraphs short (2-4 lines).
-9. Never return one huge paragraph.
-10. End every answer with a short "Summary".
+1. Understand the student's actual question before answering.
 
-Answer naturally like a professional teacher.
+2. Use the conversation history to understand follow-up questions and
+   references such as "this", "that", "it", "continue", "next", "the
+   previous topic", etc.
+
+3. If information from an uploaded document is provided, use it when
+   it is relevant to the student's question.
+
+4. If the uploaded document does not contain enough information to
+   answer the question, use your general knowledge when appropriate.
+
+5. If the question is unrelated to the uploaded document, answer it
+   normally.
+
+6. Never claim that information came from the uploaded document if
+   the provided document information does not support it.
+
+7. Never mention internal retrieval, embeddings, chunks, similarity
+   scores, prompts, or other implementation details.
+
+8. Do not blindly repeat the provided document. Understand it and
+   explain it naturally.
+
+9. Preserve important terminology from the source material when
+   explaining document-based questions.
+
+10. If the student asks for examples, give useful examples related to
+    the concept being discussed.
+
+11. If the student asks to continue, continue naturally from the
+    current conversation rather than starting an unrelated topic.
+
+12. If the student asks a simple question, don't unnecessarily give
+    an extremely long answer.
+
+13. If the student asks for a detailed explanation, provide a deeper
+    explanation.
+
+14. If the student asks for questions, exercises, revision material,
+    or a quiz based on an uploaded document, use the relevant
+    document information when available.
+
+FORMATTING:
+
+- Use clear headings when they improve readability.
+- Use bullet points when appropriate.
+- Use numbered steps for procedures.
+- Highlight important terms using **bold**.
+- Keep paragraphs short.
+- For programming questions, use properly formatted code blocks.
+- Do not force headings or bullet points when a simple answer is better.
+- Do not unnecessarily repeat the question.
+
+Answer naturally like a professional, patient teacher.
 """
+
+
+# =========================================================
+# NORMAL RESPONSE
+# =========================================================
+
+def generate_reply(messages: list, emotion: str = "neutral") -> str:
+
+    system_prompt = build_system_prompt(emotion)
 
     conversation = [
         {
@@ -156,39 +163,121 @@ Answer naturally like a professional teacher.
 
     conversation.extend(messages)
 
-    response = client.chat.completions.create(
-        model="llama-3.1-8b-instant",
-        messages=conversation,
-        temperature=0.4,
-        max_tokens=900,
-        stream=True
-    )
+    try:
 
-    for chunk in response:
+        response = client.chat.completions.create(
 
-        if chunk.choices:
+            model="openai/gpt-oss-120b",
+
+            messages=conversation,
+
+            temperature=0.4,
+
+            max_tokens=900
+        )
+
+        return response.choices[0].message.content
+
+    except Exception as e:
+
+        return f"Error: {str(e)}"
+
+
+# =========================================================
+# STREAMING RESPONSE
+# =========================================================
+
+def generate_reply_stream(
+    messages: list,
+    emotion: str = "neutral"
+):
+
+    system_prompt = build_system_prompt(emotion)
+
+    conversation = [
+        {
+            "role": "system",
+            "content": system_prompt
+        }
+    ]
+
+    conversation.extend(messages)
+
+    try:
+
+        response = client.chat.completions.create(
+
+            model="openai/gpt-oss-120b",
+
+            messages=conversation,
+
+            temperature=0.4,
+
+            max_tokens=900,
+
+            stream=True
+        )
+
+        for chunk in response:
+
+            if not chunk.choices:
+                continue
 
             delta = chunk.choices[0].delta.content
 
             if delta:
                 yield delta
 
+    except Exception as e:
+
+        yield f"Error: {str(e)}"
+
+
+# =========================================================
+# CLEAN TEXT
+# =========================================================
+
+def clean_text(text: str) -> str:
+
+    if not text:
+        return ""
+
+    # Remove HTML tags if present
+    text = re.sub(
+        r"<[^>]*>",
+        "",
+        text
+    )
+
+    # Normalize excessive blank lines
+    text = re.sub(
+        r"\n{3,}",
+        "\n\n",
+        text
+    )
+
+    return text.strip()
+
+
+# =========================================================
+# GENERATE STUDY NOTES
+# =========================================================
 
 def generate_notes(conversation: str) -> str:
 
     prompt = f"""
-You are an expert teacher.
-
-Convert the following conversation into well-structured study notes.
+Convert the following tutoring conversation into well-structured
+study notes.
 
 Rules:
 
 - Use proper headings.
-- Use bullet points.
+- Use bullet points where useful.
 - Highlight important terms using **bold**.
 - Explain concepts simply.
-- Include examples if discussed.
+- Include examples that were discussed.
 - Remove greetings and unnecessary conversation.
+- Preserve important technical terminology.
 - End with a short Summary.
 
 Conversation:
@@ -197,89 +286,32 @@ Conversation:
 """
 
     try:
+
         response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+
+            model="openai/gpt-oss-120b",
+
             messages=[
+
                 {
                     "role": "system",
-                    "content": "You are an expert note maker."
+                    "content": "You are an expert study-note maker."
                 },
+
                 {
                     "role": "user",
                     "content": prompt
                 }
+
             ],
+
             temperature=0.3,
+
             max_tokens=1200
         )
 
         return response.choices[0].message.content
 
     except Exception as e:
+
         return f"Error: {str(e)}"
-    
-
-
-def generate_flashcards(conversation: str):
-
-    prompt = f"""
-You are an expert teacher.
-
-Read the conversation and generate study flashcards.
-
-Rules:
-
-- Create between 10 and 20 flashcards.
-- Focus only on important concepts.
-- Keep answers short (1-3 sentences).
-- Don't include greetings.
-- Don't repeat questions.
-
-Return ONLY valid JSON.
-
-Example:
-
-[
-    {{
-        "question":"What is DBMS?",
-        "answer":"Database Management System."
-    }},
-    {{
-        "question":"What is Normalization?",
-        "answer":"It reduces redundancy."
-    }}
-]
-
-Conversation:
-
-{conversation}
-"""
-
-    try:
-
-        response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
-            messages=[
-                {
-                    "role": "system",
-                    "content": "Return only JSON."
-                },
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ],
-            temperature=0.3,
-            max_tokens=1500
-        )
-
-        return json.loads(response.choices[0].message.content)
-
-    except Exception as e:
-
-        return [
-            {
-                "question": "Error",
-                "answer": str(e)
-            }
-        ]

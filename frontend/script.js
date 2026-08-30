@@ -9,6 +9,7 @@ const ICON_THUMBS_DOWN = `<svg viewBox="0 0 24 24" fill="none" stroke="currentCo
 let currentCard = 0;
 let showingAnswer = false;
 let currentPdfId = null;
+let currentLearningTopic = null;
 
 if (!localStorage.getItem("token")) {
     window.location.href = "login.html";
@@ -68,28 +69,57 @@ document.getElementById("user-input").addEventListener("keypress", function(e) {
     }
 });
 
-async function createNewSession() {
+async function createNewSession(pdfId = null) {
     try {
         const response = await fetch(`${API_URL}/session/new`, {
             method: "POST",
             headers: {
+                "Content-Type": "application/json",
                 "Authorization": `Bearer ${getToken()}`
-            }
+            },
+            body: JSON.stringify({
+                pdf_id: pdfId
+            })
         });
+
+        if (!response.ok) {
+            const error = await response.text();
+            throw new Error(error);
+        }
+
         const data = await response.json();
+
         currentSessionId = data.session_id;
-        localStorage.setItem("lastSession", currentSessionId);
-        console.log("New Session:", currentSessionId);
-        loadSessions();
-        // Clear chat window
+        currentPdfId = data.pdf_id ?? null;
+
+        localStorage.setItem(
+            "lastSession",
+            currentSessionId
+        );
+
+        console.log(
+            "New Session:",
+            currentSessionId,
+            "PDF:",
+            currentPdfId
+        );
+
+        await loadSessions();
+
         document.getElementById("chat-box").innerHTML = `
             <div class="welcome">
                 <h2>Hello! I'm your AI Tutor</h2>
                 <p>I detect how you're feeling and adapt explanations.</p>
             </div>
         `;
+
     } catch (err) {
-        console.error(err);
+        console.error(
+            "Failed to create session:",
+            err
+        );
+
+        alert("Could not create chat session.");
     }
 }
 
@@ -129,79 +159,120 @@ async function loadSessions() {
 // 💬 MAIN CHAT FUNCTION
 async function sendMessage() {
 
-    let inputField = document.getElementById("user-input");
-    let input = inputField.value.trim();
+    let inputField =
+        document.getElementById("user-input");
+
+    let input =
+        inputField.value.trim();
 
     if (!input) return;
 
     addMessage(input, "user");
+
     inputField.value = "";
-    // 👇 Track every question as a topic
+
     chatTopics.push(input);
 
-    let loadingId = addTypingIndicator();
+    let loadingId =
+        addTypingIndicator();
 
-    // Create a session automatically if none exists
-if (!currentSessionId) {
-    try {
-        const response = await fetch(`${API_URL}/session/new`, {
-            method: "POST",
-            headers: {
-                "Authorization": `Bearer ${getToken()}`
-            }
-        });
+    // Create normal session if needed
+    if (!currentSessionId) {
 
-        const session = await response.json();
-        currentSessionId = session.session_id;
-        localStorage.setItem("lastSession", currentSessionId);
+        try {
 
-        console.log("Auto-created session:", currentSessionId);
+            await createNewSession();
 
-        // Refresh the sidebar so the new session appears
-        loadSessions();
+        } catch (err) {
 
-    } catch (err) {
-        console.error("Failed to create session", err);
-        updateMessage(loadingId, "❌ Could not create chat session", "");
-        loadSessions();
-        return;
-    }
-}
+            console.error(
+                "Failed to create session:",
+                err
+            );
 
-    try {
-        let usePDF = currentPdfId !== null;
+            updateMessage(
+                loadingId,
+                "❌ Could not create chat session",
+                ""
+            );
 
-        let endpoint = usePDF ? "/ask-pdf" : "/chat";
-
-        let bodyData = usePDF
-            ? { pdf_id: currentPdfId, question: input }
-            : { message: input, emotion: currentEmotion, session_id: currentSessionId };
-        console.log(bodyData);
-        if (usePDF && currentPdfId === null) {
-            alert("Please upload and select a PDF first.");
             return;
         }
+    }
 
-        let res = await fetch(`${API_URL}${endpoint}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json",
-                        "Authorization": `Bearer ${getToken()}` },
-            body: JSON.stringify(bodyData)
-        }); 
+    try {
 
-        let data = await res.json();
-        console.log(data);
+        const bodyData = {
+            message: input,
+            emotion: currentEmotion,
+            session_id: currentSessionId
+        };
 
-        let reply = data.reply || data.answer || "No response";
+        console.log(
+            "Sending chat:",
+            bodyData
+        );
+
+        const res = await fetch(
+            `${API_URL}/chat`,
+            {
+                method: "POST",
+
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization":
+                        `Bearer ${getToken()}`
+                },
+
+                body: JSON.stringify(
+                    bodyData
+                )
+            }
+        );
+
+        if (!res.ok) {
+
+            const errorText =
+                await res.text();
+
+            throw new Error(
+                `HTTP ${res.status}: ${errorText}`
+            );
+        }
+
+        const data =
+            await res.json();
+
+        console.log(
+            "CHAT RESPONSE:",
+            data
+        );
+
+        const reply =
+            data.reply ||
+            data.answer ||
+            "No response";
+
         if (data.session_id) {
-            currentSessionId = data.session_id;
-        }
-        if (readingTimer) {
-            clearTimeout(readingTimer);
+
+            currentSessionId =
+                data.session_id;
         }
 
-        if (data.reading_time && data.study_session_id) {
-            currentStudySessionId = data.study_session_id;
+        if (readingTimer) {
+
+            clearTimeout(
+                readingTimer
+            );
+        }
+
+        if (
+            data.reading_time &&
+            data.study_session_id
+        ) {
+
+            currentStudySessionId =
+                data.study_session_id;
 
             readingTimer = setTimeout(
                 checkStudyResult,
@@ -209,26 +280,43 @@ if (!currentSessionId) {
             );
         }
 
-        // 👇 Track what student is learning
         lastChatTopic = input;
 
-        // Clean text for TTS
-        let plainText = data.plain_text || reply
+    const plainText =
+        data.plain_text ||
+        reply
             .replace(/<[^>]*>/g, "")
+            .replace(/\*\*\*/g, "")
             .replace(/\*\*/g, "")
-            .replace(/\*/g, "")
             .replace(/#{1,6}\s/g, "")
             .replace(/`{1,3}/g, "")
             .replace(/\n+/g, " ")
             .trim();
 
-        updateMessage(loadingId, reply, plainText);
+    console.log("ABOUT TO UPDATE UI");
+    console.log("loadingId:", loadingId);
+    console.log("reply:", reply);
+
+        updateMessage(
+            loadingId,
+            reply,
+            plainText
+        );
 
     } catch (error) {
-        updateMessage(loadingId, "❌ Error connecting to server", "");
+
+        console.error(
+            "Chat error:",
+            error
+        );
+
+        updateMessage(
+            loadingId,
+            "❌ Error connecting to server",
+            ""
+        );
     }
 }
-
 // 📄 Upload PDF
 async function uploadPDF() {
     let fileInput = document.getElementById("pdf-file");
@@ -251,8 +339,12 @@ async function uploadPDF() {
         });
         const data = await res.json();
         console.log("UPLOAD RESPONSE:", data);
-        currentPdfId = data.pdf_id;
         await loadPDFs();
+        
+        // Create a fresh chat attached to this PDF
+        await createNewSession(
+            data.pdf_id
+        );
         console.log("Current PDF:", currentPdfId);
         alert("✅ PDF uploaded successfully!");
         pdfUploaded = true;
@@ -465,46 +557,173 @@ function addMessage(text, type) {
 
 function updateMessage(id, newText, ttsText = "") {
 
-    let div = document.getElementById(id);
-    if (!div) return;
+    console.log("updateMessage called:", id);
 
-    div.innerHTML = `
-        <div class="markdown-body">
-            ${marked.parse(newText)}
-        </div>
+    const div = document.getElementById(id);
 
-        <div class="msg-footer">
-            <div class="action-buttons">
-                <button class="tts-btn"><span class="btn-icon">${ICON_SPEAKER}</span><span class="btn-label">Listen</span></button>
-                <button class="copy-btn"><span class="btn-icon">${ICON_COPY}</span><span class="btn-label">Copy</span></button>
-                <button class="like-btn" title="Good response">${ICON_THUMBS_UP}</button>
-                <button class="dislike-btn" title="Bad response">${ICON_THUMBS_DOWN}</button>
+    if (!div) {
+        console.error("Typing element NOT FOUND:", id);
+        return;
+    }
+
+    console.log("Typing element found:", div);
+
+    try {
+
+        let renderedText;
+
+        if (typeof marked !== "undefined") {
+            renderedText = marked.parse(newText);
+        } else {
+            console.warn("marked.js not available");
+            renderedText = newText.replace(/\n/g, "<br>");
+        }
+
+        div.innerHTML = `
+            <div class="message-content">
+                <div class="markdown-body">
+                    ${renderedText}
+                </div>
+
+                <div class="msg-footer">
+                    <div class="action-buttons">
+
+                        <button class="tts-btn">
+                            <span class="btn-icon">${ICON_SPEAKER}</span>
+                            <span class="btn-label">Listen</span>
+                        </button>
+
+                        <button class="copy-btn">
+                            <span class="btn-icon">${ICON_COPY}</span>
+                            <span class="btn-label">Copy</span>
+                        </button>
+
+                        <button class="like-btn" title="Good response">
+                            ${ICON_THUMBS_UP}
+                        </button>
+
+                        <button class="dislike-btn" title="Bad response">
+                            ${ICON_THUMBS_DOWN}
+                        </button>
+
+                    </div>
+
+                    <small>${getTime()}</small>
+                </div>
             </div>
-            <small>${getTime()}</small>
-        </div>
-    `;
+        `;
 
-    let btn = div.querySelector(".tts-btn");
-    btn.addEventListener("click", () => playAudio(ttsText, btn));
+        // ---------------------------------------------
+        // TTS
+        // ---------------------------------------------
 
-    let copyBtn = div.querySelector(".copy-btn");
-    copyBtn.onclick = () => {
-        navigator.clipboard.writeText(ttsText);
-        copyBtn.innerHTML = `<span class="btn-icon">${ICON_CHECK}</span><span class="btn-label">Copied</span>`;
-        setTimeout(() => {
-            copyBtn.innerHTML = `<span class="btn-icon">${ICON_COPY}</span><span class="btn-label">Copy</span>`;
-        }, 1500);
-    };
-    // Highlight all code blocks
-    document.querySelectorAll("pre code").forEach((block) => {
-        hljs.highlightElement(block);
-    });
+        const btn = div.querySelector(".tts-btn");
 
-    // Smooth scroll
-    document.getElementById("chat-box").scrollTo({
-        top: document.getElementById("chat-box").scrollHeight,
-        behavior: "smooth"
-    });
+        if (btn) {
+            btn.addEventListener("click", () => {
+                playAudio(ttsText, btn);
+            });
+        }
+
+        // ---------------------------------------------
+        // Copy
+        // ---------------------------------------------
+
+        const copyBtn = div.querySelector(".copy-btn");
+
+        if (copyBtn) {
+
+            copyBtn.onclick = async () => {
+
+                try {
+
+                    await navigator.clipboard.writeText(ttsText);
+
+                    copyBtn.innerHTML = `
+                        <span class="btn-icon">${ICON_CHECK}</span>
+                        <span class="btn-label">Copied</span>
+                    `;
+
+                    setTimeout(() => {
+
+                        copyBtn.innerHTML = `
+                            <span class="btn-icon">${ICON_COPY}</span>
+                            <span class="btn-label">Copy</span>
+                        `;
+
+                    }, 1500);
+
+                } catch (error) {
+
+                    console.error(
+                        "Copy failed:",
+                        error
+                    );
+
+                }
+            };
+        }
+
+        // ---------------------------------------------
+        // Highlight code
+        // ---------------------------------------------
+
+        if (typeof hljs !== "undefined") {
+
+            div.querySelectorAll("pre code").forEach(block => {
+
+                try {
+                    hljs.highlightElement(block);
+                } catch (error) {
+                    console.warn(
+                        "Code highlighting failed:",
+                        error
+                    );
+                }
+
+            });
+
+        }
+
+        // ---------------------------------------------
+        // Scroll
+        // ---------------------------------------------
+
+        const chatBox =
+            document.getElementById("chat-box");
+
+        if (chatBox) {
+
+            chatBox.scrollTo({
+                top: chatBox.scrollHeight,
+                behavior: "smooth"
+            });
+
+        }
+
+        console.log("Message successfully rendered.");
+
+    } catch (error) {
+
+        console.error(
+            "updateMessage ERROR:",
+            error
+        );
+
+        // ---------------------------------------------
+        // IMPORTANT:
+        // Even if markdown/TTS/etc. fails,
+        // don't leave "AI is thinking..."
+        // ---------------------------------------------
+
+        div.innerHTML = `
+            <div class="message-content">
+                <div class="markdown-body">
+                    ${newText.replace(/\n/g, "<br>")}
+                </div>
+            </div>
+        `;
+    }
 }
 
 
@@ -519,69 +738,234 @@ function getTime() {
 
 let quizData = [];
 
-function openQuizModal() {
-    document.getElementById("quiz-modal").style.display   = "flex";
-    document.getElementById("quiz-setup").style.display   = "block";
+async function openQuizModal() {
+
+    document.getElementById("quiz-modal").style.display = "flex";
+    document.getElementById("quiz-setup").style.display = "block";
     document.getElementById("quiz-questions").style.display = "none";
-    document.getElementById("quiz-results").style.display  = "none";
-    document.getElementById("quiz-loading").style.display  = "none";
+    document.getElementById("quiz-results").style.display = "none";
+    document.getElementById("quiz-loading").style.display = "none";
 
-    // ── Chat Topics List ──────────────────────────────
-    let chatLabel    = document.getElementById("src-chat-label");
-    let topicListDiv = document.getElementById("chat-topic-list");
+    const chatLabel =
+        document.getElementById("src-chat-label");
 
-    if (chatTopics.length > 0) {
-        chatLabel.style.display = "flex";
+    const topicListDiv =
+        document.getElementById("chat-topic-list");
 
-        // Build topic dropdown
-        let options = chatTopics
-            .slice(-10)  // last 10 questions only
-            .reverse()   // newest first
-            .map((t, i) =>
-                `<option value="${t}">${t.length > 60 ? t.substring(0,60)+"..." : t}</option>`
-            )
-            .join("");
+    // -----------------------------------------------------
+    // Load topics from database
+    // -----------------------------------------------------
 
-        topicListDiv.innerHTML = `
-            <select id="chat-topic-select"
-                style="width:100%; padding:8px; margin-top:6px;
-                       border:1px solid #ddd; border-radius:6px; font-size:13px;">
-                ${options}
-            </select>`;
+    if (!currentSessionId) {
+
+        chatLabel.style.display = "none";
 
     } else {
-        chatLabel.style.display = "none";
+
+        try {
+
+            const response = await fetch(
+                `${API_URL}/session/${currentSessionId}/topics`,
+                {
+                    headers: {
+                        "Authorization":
+                            `Bearer ${getToken()}`
+                    }
+                }
+            );
+
+            if (!response.ok) {
+                throw new Error(
+                    "Failed to load learning topics"
+                );
+            }
+
+            const data = await response.json();
+
+            const topics = data.topics || [];
+
+            if (topics.length > 0) {
+
+                chatLabel.style.display = "flex";
+
+                const options = topics
+                    .map(topic => {
+
+                        const currentLabel =
+                            topic.is_current
+                                ? " (Current)"
+                                : "";
+
+                        return `
+                            <option value="${topic.id}">
+                                ${topic.topic}${currentLabel}
+                            </option>
+                        `;
+                    })
+                    .join("");
+
+                topicListDiv.innerHTML = `
+                    <select
+                        id="chat-topic-select"
+                        style="
+                            width:100%;
+                            padding:8px;
+                            margin-top:6px;
+                            border:1px solid #ddd;
+                            border-radius:6px;
+                            font-size:13px;
+                        "
+                    >
+                        ${options}
+                    </select>
+                `;
+
+                // Automatically select current topic
+                const currentTopic =
+                    topics.find(
+                        topic => topic.is_current
+                    );
+
+                if (currentTopic) {
+
+                    document.getElementById(
+                        "chat-topic-select"
+                    ).value = currentTopic.id;
+                }
+
+            } else {
+
+                chatLabel.style.display = "none";
+
+            }
+
+        } catch (error) {
+
+            console.error(
+                "Failed to load topics:",
+                error
+            );
+
+            chatLabel.style.display = "none";
+        }
     }
 
-    // ── PDF Option ────────────────────────────────────
-    let pdfLabel = document.getElementById("src-pdf-label");
+    // -----------------------------------------------------
+    // PDF option
+    // -----------------------------------------------------
+
+    const pdfLabel =
+        document.getElementById("src-pdf-label");
+
     if (pdfUploaded) {
+
         pdfLabel.style.display = "flex";
-        document.getElementById("pdf-name-preview").innerText = pdfFileName;
+
+        document.getElementById(
+            "pdf-name-preview"
+        ).innerText = pdfFileName;
+
     } else {
+
         pdfLabel.style.display = "none";
     }
 
-    // ── Auto select best source ───────────────────────
+    // -----------------------------------------------------
+    // Automatically choose best source
+    // -----------------------------------------------------
+
     if (pdfUploaded) {
-        document.querySelector('input[name="quiz-source"][value="pdf"]').checked = true;
-        document.getElementById("custom-topic-div").style.display = "none";
-    } else if (chatTopics.length > 0) {
-        document.querySelector('input[name="quiz-source"][value="chat"]').checked = true;
-        document.getElementById("custom-topic-div").style.display = "none";
+
+        document.querySelector(
+            'input[name="quiz-source"][value="pdf"]'
+        ).checked = true;
+
+        document.getElementById(
+            "custom-topic-div"
+        ).style.display = "none";
+
+    } else if (currentSessionId) {
+
+        const topicsResponse =
+            await fetch(
+                `${API_URL}/session/${currentSessionId}/topics`,
+                {
+                    headers: {
+                        "Authorization":
+                            `Bearer ${getToken()}`
+                    }
+                }
+            );
+
+        if (topicsResponse.ok) {
+
+            const topicsData =
+                await topicsResponse.json();
+
+            if (
+                topicsData.topics &&
+                topicsData.topics.length > 0
+            ) {
+
+                document.querySelector(
+                    'input[name="quiz-source"][value="chat"]'
+                ).checked = true;
+
+                document.getElementById(
+                    "custom-topic-div"
+                ).style.display = "none";
+
+            } else {
+
+                document.querySelector(
+                    'input[name="quiz-source"][value="custom"]'
+                ).checked = true;
+
+                document.getElementById(
+                    "custom-topic-div"
+                ).style.display = "block";
+            }
+        }
+
     } else {
-        document.querySelector('input[name="quiz-source"][value="custom"]').checked = true;
-        document.getElementById("custom-topic-div").style.display = "block";
+
+        document.querySelector(
+            'input[name="quiz-source"][value="custom"]'
+        ).checked = true;
+
+        document.getElementById(
+            "custom-topic-div"
+        ).style.display = "block";
     }
 
-    // ── Show/hide custom input on radio change ────────
-    document.querySelectorAll('input[name="quiz-source"]').forEach(radio => {
-        radio.addEventListener("change", () => {
-            let val = document.querySelector('input[name="quiz-source"]:checked').value;
-            document.getElementById("custom-topic-div").style.display =
-                val === "custom" ? "block" : "none";
+    // -----------------------------------------------------
+    // Source radio buttons
+    // -----------------------------------------------------
+
+    document
+        .querySelectorAll(
+            'input[name="quiz-source"]'
+        )
+        .forEach(radio => {
+
+            radio.addEventListener(
+                "change",
+                () => {
+
+                    const value =
+                        document.querySelector(
+                            'input[name="quiz-source"]:checked'
+                        ).value;
+
+                    document.getElementById(
+                        "custom-topic-div"
+                    ).style.display =
+                        value === "custom"
+                            ? "block"
+                            : "none";
+                }
+            );
         });
-    });
 }
 
 
@@ -591,62 +975,208 @@ function closeQuizModal() {
 
 async function startQuiz() {
 
-    let source = document.querySelector('input[name="quiz-source"]:checked')?.value || "custom";
-    let type   = document.getElementById("quiz-type").value;
-    let num    = document.getElementById("quiz-num").value;
-    let topic  = "";
+    const source =
+        document.querySelector(
+            'input[name="quiz-source"]:checked'
+        )?.value || "custom";
+
+    const type =
+        document.getElementById(
+            "quiz-type"
+        ).value;
+
+    const num =
+        parseInt(
+            document.getElementById(
+                "quiz-num"
+            ).value
+        );
+
+    let topic = null;
+    let topicId = null;
+
+    // -----------------------------------------------------
+    // Stored learning topic
+    // -----------------------------------------------------
 
     if (source === "chat") {
-        // Get selected topic from dropdown
-        let select = document.getElementById("chat-topic-select");
-        topic = select ? select.value : chatTopics[chatTopics.length - 1];
 
-    } else if (source === "pdf") {
-        // Use last chat topic to search PDF, or empty for full PDF
-        let select = document.getElementById("chat-topic-select");
-        topic = (select && chatTopics.length > 0) ? select.value : "";
+        const select =
+            document.getElementById(
+                "chat-topic-select"
+            );
 
-    } else {
-        topic = document.getElementById("quiz-topic").value.trim();
-        if (!topic) {
-            alert("Please enter a topic!");
+        if (!select || !select.value) {
+
+            alert(
+                "No learning topic available."
+            );
+
+            return;
+        }
+
+        topicId =
+            parseInt(select.value);
+
+    }
+
+    // -----------------------------------------------------
+    // PDF
+    //
+    // We still use the selected learning topic
+    // to search inside the PDF.
+    // -----------------------------------------------------
+
+    else if (source === "pdf") {
+
+        const select =
+            document.getElementById(
+                "chat-topic-select"
+            );
+
+        if (select && select.value) {
+
+            topicId =
+                parseInt(select.value);
+
+        } else {
+
+            alert(
+                "Please discuss a topic before taking a PDF quiz."
+            );
+
             return;
         }
     }
 
-    document.getElementById("quiz-loading").style.display = "block";
+    // -----------------------------------------------------
+    // Custom topic
+    // -----------------------------------------------------
+
+    else {
+
+        topic =
+            document.getElementById(
+                "quiz-topic"
+            ).value.trim();
+
+        if (!topic) {
+
+            alert(
+                "Please enter a topic!"
+            );
+
+            return;
+        }
+    }
+
+    // -----------------------------------------------------
+    // Show loading
+    // -----------------------------------------------------
+
+    document.getElementById(
+        "quiz-loading"
+    ).style.display = "block";
 
     try {
-        let res = await fetch(`${API_URL}/generate-quiz`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json",
-                        "Authorization": `Bearer ${getToken()}`
-             },
-            body: JSON.stringify({
-                topic     : topic,
-                quiz_type : type,
-                num_questions: parseInt(num),
-                use_pdf   : source === "pdf"
-            })
-        });
 
-        let data = await res.json();
-        quizData = data.quiz;
+        const response =
+            await fetch(
+                `${API_URL}/generate-quiz`,
+                {
+                    method: "POST",
 
-        if (!quizData || quizData.length === 0) {
-            alert("Could not generate quiz. Try a different topic.");
-            document.getElementById("quiz-loading").style.display = "none";
+                    headers: {
+                        "Content-Type":
+                            "application/json",
+
+                        "Authorization":
+                            `Bearer ${getToken()}`
+                    },
+
+                    body: JSON.stringify({
+
+                        topic: topic,
+
+                        topic_id: topicId,
+
+                        session_id:
+                            currentSessionId,
+
+                        quiz_type: type,
+
+                        num_questions: num,
+
+                        use_pdf:
+                            source === "pdf"
+                    })
+                }
+            );
+
+        if (!response.ok) {
+
+            const errorText =
+                await response.text();
+
+            throw new Error(
+                `HTTP ${response.status}: ${errorText}`
+            );
+        }
+
+        const data =
+            await response.json();
+
+        console.log(
+            "QUIZ RESPONSE:",
+            data
+        );
+
+        quizData =
+            data.quiz || [];
+
+        if (
+            !quizData ||
+            quizData.length === 0
+        ) {
+
+            alert(
+                "Could not generate quiz. Try another topic."
+            );
+
             return;
         }
 
-        renderQuiz(topic || "PDF Content", type);
+        // -------------------------------------------------
+        // Use topic returned by backend
+        // -------------------------------------------------
+
+        const finalTopic =
+            data.topic ||
+            topic ||
+            "Selected Topic";
+
+        renderQuiz(
+            finalTopic,
+            type
+        );
 
     } catch (error) {
-        alert("❌ Error generating quiz");
-        console.error(error);
-    }
 
-    document.getElementById("quiz-loading").style.display = "none";
+        console.error(
+            "Quiz generation error:",
+            error
+        );
+
+        alert(
+            "❌ Error generating quiz"
+        );
+
+    } finally {
+
+        document.getElementById(
+            "quiz-loading"
+        ).style.display = "none";
+    }
 }
 
 
@@ -892,7 +1422,7 @@ function handleTutorAction(action) {
     document.querySelectorAll(".tutor-popup").forEach(e => e.remove());
 
     if (action === "quiz") {
-        openQuizModal();
+        startQuickQuiz();
     }
     else if (action === "simplify") {
         document.getElementById("user-input").value =
@@ -917,6 +1447,182 @@ navigator.mediaDevices.getUserMedia({ video: true })
 })
 .catch(err => console.log(err));
 
+async function startQuickQuiz() {
+
+    if (!currentSessionId) {
+
+        alert(
+            "No active learning session."
+        );
+
+        return;
+    }
+
+    try {
+
+        // ---------------------------------------------
+        // Get current session topics
+        // ---------------------------------------------
+
+        const response =
+            await fetch(
+                `${API_URL}/session/${currentSessionId}/topics`,
+                {
+                    headers: {
+                        "Authorization":
+                            `Bearer ${getToken()}`
+                    }
+                }
+            );
+
+        if (!response.ok) {
+
+            throw new Error(
+                "Could not load current topic."
+            );
+        }
+
+        const data =
+            await response.json();
+
+        // ---------------------------------------------
+        // Find current topic
+        // ---------------------------------------------
+
+        const currentTopic =
+            data.topics?.find(
+                topic => topic.is_current
+            );
+
+        if (!currentTopic) {
+
+            alert(
+                "You haven't started learning a topic yet."
+            );
+
+            return;
+        }
+
+        console.log(
+            "Starting quick quiz on:",
+            currentTopic.topic
+        );
+
+        // ---------------------------------------------
+        // Generate quiz directly
+        // ---------------------------------------------
+
+        document.getElementById(
+            "quiz-modal"
+        ).style.display = "flex";
+
+        document.getElementById(
+            "quiz-setup"
+        ).style.display = "none";
+
+        document.getElementById(
+            "quiz-questions"
+        ).style.display = "none";
+
+        document.getElementById(
+            "quiz-results"
+        ).style.display = "none";
+
+        document.getElementById(
+            "quiz-loading"
+        ).style.display = "block";
+
+        const quizResponse =
+            await fetch(
+                `${API_URL}/generate-quiz`,
+                {
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json",
+
+                        "Authorization":
+                            `Bearer ${getToken()}`
+                    },
+
+                    body: JSON.stringify({
+
+                        topic_id:
+                            currentTopic.id,
+
+                        session_id:
+                            currentSessionId,
+
+                        topic: null,
+
+                        quiz_type: "mcq",
+
+                        num_questions: 5,
+
+                        use_pdf:
+                            currentPdfId !== null
+                    })
+                }
+            );
+
+        if (!quizResponse.ok) {
+
+            const errorText =
+                await quizResponse.text();
+
+            throw new Error(
+                errorText
+            );
+        }
+
+        const quizResult =
+            await quizResponse.json();
+
+        console.log(
+            "QUICK QUIZ:",
+            quizResult
+        );
+
+        quizData =
+            quizResult.quiz || [];
+
+        if (
+            !quizData ||
+            quizData.length === 0
+        ) {
+
+            alert(
+                "Could not generate the quiz."
+            );
+
+            return;
+        }
+
+        renderQuiz(
+            quizResult.topic ||
+            currentTopic.topic,
+            "mcq"
+        );
+
+    } catch (error) {
+
+        console.error(
+            "Quick quiz error:",
+            error
+        );
+
+        alert(
+            "❌ Could not start quiz."
+        );
+
+    } finally {
+
+        document.getElementById(
+            "quiz-loading"
+        ).style.display = "none";
+    }
+}
 
 // ========== GAME SYSTEM ==========
 
@@ -938,18 +1644,97 @@ function triggerDrowsyGame() {
 
 // ── Launch selected game ──────────────────────────────────────
 async function launchGame(type) {
+
     document.getElementById("drowsy-popup").style.display = "none";
 
-    let topic  = lastChatTopic || "general knowledge";
-    let usePdf = pdfUploaded;
+    if (!currentSessionId) {
+        alert("No active learning session.");
+        return;
+    }
 
-    if (type === "hangman") {
-        document.getElementById("hangman-modal").style.display = "flex";
-        await loadHangmanWords(topic, usePdf);
+    try {
 
-    } else if (type === "crossword") {
-        document.getElementById("crossword-modal").style.display = "flex";
-        await loadCrosswordWords(topic, usePdf);
+        // Get stored learning topics for this session
+        const response = await fetch(
+            `${API_URL}/session/${currentSessionId}/topics`,
+            {
+                headers: {
+                    "Authorization": `Bearer ${getToken()}`
+                }
+            }
+        );
+
+        if (!response.ok) {
+            throw new Error("Could not load learning topics.");
+        }
+
+        const data = await response.json();
+
+        // Find the topic currently being studied
+        const currentTopic = data.topics?.find(
+            topic => topic.is_current
+        );
+
+        if (!currentTopic) {
+
+            alert(
+                "You haven't started learning a topic yet."
+            );
+
+            return;
+        }
+
+        console.log(
+            "Launching game:",
+            type,
+            "Topic:",
+            currentTopic.topic,
+            "Topic ID:",
+            currentTopic.id
+        );
+
+        // -------------------------------------------------
+        // HANGMAN
+        // -------------------------------------------------
+
+        if (type === "hangman") {
+
+            document.getElementById(
+                "hangman-modal"
+            ).style.display = "flex";
+
+            await loadHangmanWords(
+                currentTopic.topic,
+                currentTopic.id
+            );
+        }
+
+        // -------------------------------------------------
+        // CROSSWORD
+        // -------------------------------------------------
+
+        else if (type === "crossword") {
+
+            document.getElementById(
+                "crossword-modal"
+            ).style.display = "flex";
+
+            await loadCrosswordWords(
+                currentTopic.topic,
+                currentTopic.id
+            );
+        }
+
+    } catch (error) {
+
+        console.error(
+            "Failed to launch game:",
+            error
+        );
+
+        alert(
+            "❌ Could not start the game."
+        );
     }
 }
 
@@ -961,33 +1746,107 @@ function closeGame(type) {
 // HANGMAN
 // ══════════════════════════════════════════════════════════════
 
-async function loadHangmanWords(topic, usePdf) {
-    document.getElementById("hangman-status").innerText = "⏳ Loading words...";
-    document.getElementById("hangman-word").innerText   = "";
-    document.getElementById("hangman-keyboard").innerHTML = "";
-    document.getElementById("hangman-wrong").innerText  = "";
+async function loadHangmanWords(topic, topicId) {
+
+    document.getElementById(
+        "hangman-status"
+    ).innerText = "⏳ Loading words...";
+
+    document.getElementById(
+        "hangman-word"
+    ).innerText = "";
+
+    document.getElementById(
+        "hangman-keyboard"
+    ).innerHTML = "";
+
+    document.getElementById(
+        "hangman-wrong"
+    ).innerText = "";
 
     try {
-        let res = await fetch(`${API_URL}/generate-hangman`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json",
-                        "Authorization": `Bearer ${getToken()}`
-             },
-            body: JSON.stringify({ topic, use_pdf: usePdf, num_words: 5 })
-        });
-        let data = await res.json();
-        hangmanWords = data.words || [];
+
+        const res = await fetch(
+            `${API_URL}/generate-hangman`,
+            {
+                method: "POST",
+
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${getToken()}`
+                },
+
+                body: JSON.stringify({
+
+                    topic: null,
+
+                    session_id:
+                        currentSessionId,
+
+                    topic_id:
+                        topicId,
+
+                    use_pdf: true,
+
+                    num_words: 5
+                })
+            }
+        );
+
+        if (!res.ok) {
+
+            const errorText =
+                await res.text();
+
+            throw new Error(
+                `HTTP ${res.status}: ${errorText}`
+            );
+        }
+
+        const data =
+            await res.json();
+
+        console.log(
+            "HANGMAN RESPONSE:",
+            data
+        );
+
+        hangmanWords =
+            data.words || [];
+
         hangmanIndex = 0;
 
-        if (hangmanWords.length === 0) {
-            document.getElementById("hangman-status").innerText = "❌ Could not load words.";
+        if (
+            hangmanWords.length === 0
+        ) {
+
+            document.getElementById(
+                "hangman-status"
+            ).innerText =
+                "❌ Could not load words.";
+
             return;
         }
+
+        // Show topic to student
+        document.getElementById(
+            "hangman-status"
+        ).innerText =
+            `📚 Topic: ${data.topic}`;
 
         startHangmanWord();
 
     } catch (e) {
-        document.getElementById("hangman-status").innerText = "❌ Error loading words.";
+
+        console.error(
+            "Hangman error:",
+            e
+        );
+
+        document.getElementById(
+            "hangman-status"
+        ).innerText =
+            "❌ Error loading words.";
     }
 }
 
@@ -1145,32 +2004,100 @@ function drawHangman(wrong) {
 
 const GRID_SIZE = 15;
 
-async function loadCrosswordWords(topic, usePdf) {
-    document.getElementById("crossword-grid").innerHTML    = "⏳ Generating crossword...";
-    document.getElementById("crossword-across").innerHTML  = "";
-    document.getElementById("crossword-down").innerHTML    = "";
-    document.getElementById("crossword-result").innerText  = "";
+async function loadCrosswordWords(topic, topicId) {
+
+    document.getElementById(
+        "crossword-grid"
+    ).innerHTML =
+        "⏳ Generating crossword...";
+
+    document.getElementById(
+        "crossword-across"
+    ).innerHTML = "";
+
+    document.getElementById(
+        "crossword-down"
+    ).innerHTML = "";
+
+    document.getElementById(
+        "crossword-result"
+    ).innerText = "";
 
     try {
-        let res = await fetch(`${API_URL}/generate-crossword`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json",
-                        "Authorization": `Bearer ${getToken()}`
-                    },
-            body: JSON.stringify({ topic, use_pdf: usePdf, num_words: 6 })
-        });
-        let data = await res.json();
-        crosswordWords = data.words || [];
 
-        if (crosswordWords.length === 0) {
-            document.getElementById("crossword-grid").innerHTML = "❌ Could not generate crossword.";
+        const res = await fetch(
+            `${API_URL}/generate-crossword`,
+            {
+                method: "POST",
+
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${getToken()}`
+                },
+
+                body: JSON.stringify({
+
+                    topic: null,
+
+                    session_id:
+                        currentSessionId,
+
+                    topic_id:
+                        topicId,
+
+                    use_pdf: true,
+
+                    num_words: 6
+                })
+            }
+        );
+
+        if (!res.ok) {
+
+            const errorText =
+                await res.text();
+
+            throw new Error(
+                `HTTP ${res.status}: ${errorText}`
+            );
+        }
+
+        const data =
+            await res.json();
+
+        console.log(
+            "CROSSWORD RESPONSE:",
+            data
+        );
+
+        crosswordWords =
+            data.words || [];
+
+        if (
+            crosswordWords.length === 0
+        ) {
+
+            document.getElementById(
+                "crossword-grid"
+            ).innerHTML =
+                "❌ Could not generate crossword.";
+
             return;
         }
 
         buildCrossword();
 
     } catch (e) {
-        document.getElementById("crossword-grid").innerHTML = "❌ Error loading crossword.";
+
+        console.error(
+            "Crossword error:",
+            e
+        );
+
+        document.getElementById(
+            "crossword-grid"
+        ).innerHTML =
+            "❌ Error loading crossword.";
     }
 }
 
@@ -1453,22 +2380,104 @@ function logoutUser() {
 }
 
 async function openSession(sessionId) {
-    currentSessionId = sessionId;
-    localStorage.setItem("lastSession", sessionId);
-    const response = await fetch(`${API_URL}/session/${sessionId}`, {
-        headers: {
-            Authorization: `Bearer ${getToken()}`
+
+    try {
+
+        currentSessionId = sessionId;
+
+        localStorage.setItem(
+            "lastSession",
+            sessionId
+        );
+
+        const response = await fetch(
+            `${API_URL}/session/${sessionId}`,
+            {
+                headers: {
+                    Authorization:
+                        `Bearer ${getToken()}`
+                }
+            }
+        );
+
+        if (!response.ok) {
+            throw new Error(
+                "Failed to load session"
+            );
         }
-    });
-    const chats = await response.json();
-    const chatBox = document.getElementById("chat-box");
-    chatBox.innerHTML = "";
-    chats.forEach(chat => {
-        addMessage(chat.question, "user");
-        let id = addTypingIndicator();
-        updateMessage(id, chat.answer, chat.answer);
-    });
-    chatBox.scrollTop = chatBox.scrollHeight;
+
+        const data = await response.json();
+
+        // ---------------------------------------------
+        // Restore PDF attached to this conversation
+        // ---------------------------------------------
+
+        if (data.pdf) {
+
+            currentPdfId = data.pdf.id;
+
+            console.log(
+                "Session PDF:",
+                data.pdf.filename
+            );
+
+        } else {
+
+            currentPdfId = null;
+        }
+
+        // ---------------------------------------------
+        // Restore messages
+        // ---------------------------------------------
+
+        const chatBox =
+            document.getElementById(
+                "chat-box"
+            );
+
+        chatBox.innerHTML = "";
+
+        const messages =
+            data.messages || [];
+
+        messages.forEach(chat => {
+
+            addMessage(
+                chat.question,
+                "user"
+            );
+
+            const id =
+                addTypingIndicator();
+
+            updateMessage(
+                id,
+                chat.answer,
+                chat.answer
+            );
+        });
+
+        chatBox.scrollTop =
+            chatBox.scrollHeight;
+
+        console.log(
+            "Opened session:",
+            sessionId,
+            "PDF:",
+            currentPdfId
+        );
+
+    } catch (error) {
+
+        console.error(
+            "Failed to open session:",
+            error
+        );
+
+        alert(
+            "Could not load this conversation."
+        );
+    }
 }
 
 
@@ -1606,8 +2615,37 @@ async function loadPDFs() {
     });
 }
 
-function selectPDF(id, filename) {
-    currentPdfId = id;
-    console.log("Selected PDF:", filename);
-    alert(`${filename} selected`);
+async function selectPDF(id, filename) {
+
+    console.log(
+        "Selecting PDF:",
+        id,
+        filename
+    );
+
+    try {
+
+        // Create a NEW conversation attached to this PDF
+        await createNewSession(id);
+
+        console.log(
+            "PDF chat session created:",
+            currentSessionId
+        );
+
+        alert(
+            `📄 ${filename} selected`
+        );
+
+    } catch (error) {
+
+        console.error(
+            "Failed to select PDF:",
+            error
+        );
+
+        alert(
+            "Could not open PDF chat."
+        );
+    }
 }

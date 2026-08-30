@@ -15,6 +15,8 @@ class ChatResponse(BaseModel):
     plain_text: str
     emotion: str
 
+class CreateSessionRequest(BaseModel):
+    pdf_id: int | None = None
 
 # ==============================
 # Authentication Schemas

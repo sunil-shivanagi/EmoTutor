@@ -7,13 +7,16 @@ student_sessions = {}
 
 def estimate_reading_time(text):
     """
-    Estimate how long student needs to read answer.
-    Technical reading speed ≈ 120 words/min
+    Estimate how long a student needs to read the answer.
+    Uses approximately 180 words/minute.
+    Minimum: 10 seconds
+    Maximum: 30 seconds
     """
     words = len(text.split())
-    seconds = int((words / 120) * 60)
 
-    return max(seconds, 10)
+    seconds = int((words / 180) * 60)
+
+    return min(max(seconds, 10), 30)
 
 
 def start_study_session(session_id, answer_text):

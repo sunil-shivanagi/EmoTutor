@@ -1,83 +1,280 @@
 from app.services.pdf_service import search_chunks
 from app.config import GROQ_API_KEY
+
 from groq import Groq
-import json, re
+from sqlalchemy.orm import Session
+
+import json
+import re
+
 
 client = Groq(api_key=GROQ_API_KEY)
 
+
+# =========================================================
+# CALL LLM
+# =========================================================
+
 def call_llm(prompt: str) -> list:
+
     try:
+
         response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+
+            model="openai/gpt-oss-120b",
+
             messages=[
-                {"role": "system", "content": "You are a word game generator. Return only valid JSON arrays."},
-                {"role": "user", "content": prompt}
+                {
+                    "role": "system",
+                    "content": (
+                        "You are an expert educational "
+                        "word game generator. "
+                        "Return ONLY valid JSON arrays."
+                    )
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
             ],
-            temperature=0.7
+
+            temperature=0.5,
+
+            max_tokens=1200
         )
-        raw = response.choices[0].message.content.strip()
-        raw = re.sub(r"```json|```", "", raw).strip()
-        return json.loads(raw)
+
+        raw = (
+            response
+            .choices[0]
+            .message
+            .content
+            .strip()
+        )
+
+        raw = re.sub(
+            r"```json|```",
+            "",
+            raw
+        ).strip()
+
+        result = json.loads(raw)
+
+        if not isinstance(result, list):
+
+            print(
+                "Game generation returned "
+                "non-list response."
+            )
+
+            return []
+
+        return result
+
     except Exception as e:
-        print("Game generation error:", e)
+
+        print(
+            "Game generation error:",
+            e
+        )
+
         return []
 
-def get_context(topic: str, use_pdf: bool) -> str:
-    if use_pdf:
-        context = search_chunks(topic)
-        if context and len(context.strip()) > 50:
-            return context
-    return f"General knowledge about: {topic}"
 
-def generate_hangman_words(topic: str, use_pdf: bool, num_words: int) -> list:
-    context = get_context(topic, use_pdf)
+# =========================================================
+# GET CONTEXT
+# =========================================================
+
+def get_context(
+    topic: str,
+    use_pdf: bool,
+    db: Session | None = None,
+    pdf_id: int | None = None
+) -> str:
+
+    # -----------------------------------------------------
+    # PDF context
+    # -----------------------------------------------------
+
+    if (
+        use_pdf
+        and db is not None
+        and pdf_id is not None
+    ):
+
+        print("=" * 60)
+        print("GAME PDF SEARCH")
+        print("Topic:", topic)
+        print("PDF ID:", pdf_id)
+        print("=" * 60)
+
+        search_result = search_chunks(
+            topic,
+            db,
+            pdf_id
+        )
+
+        context = search_result.get(
+            "context",
+            ""
+        )
+
+        print(
+            "Game PDF relevance:",
+            search_result.get(
+                "score",
+                0
+            )
+        )
+
+        if (
+            context
+            and len(context.strip()) > 50
+        ):
+
+            return context
+
+    # -----------------------------------------------------
+    # General topic
+    # -----------------------------------------------------
+
+    return (
+        f"General educational knowledge "
+        f"about: {topic}"
+    )
+
+
+# =========================================================
+# HANGMAN
+# =========================================================
+
+def generate_hangman_words(
+    topic: str,
+    use_pdf: bool,
+    num_words: int,
+    db: Session | None = None,
+    pdf_id: int | None = None
+) -> list:
+
+    context = get_context(
+        topic,
+        use_pdf,
+        db,
+        pdf_id
+    )
 
     prompt = f"""
-You are a word game generator for students.
+You are an expert educational Hangman
+game generator.
 
-Context: {context}
-Topic: {topic}
+The student is currently learning:
 
-Generate exactly {num_words} words for a Hangman game.
-Each word must be a key term related to the topic.
-Return ONLY a JSON array like this:
+{topic}
+
+Use the following content as your
+primary source:
+
+{context}
+
+Generate exactly {num_words} words
+for a Hangman game.
+
+Each word must be an important
+concept or term related to:
+
+{topic}
+
+Return ONLY a JSON array in this format:
+
 [
-  {{"word": "PYTHON", "hint": "A popular programming language named after a snake"}},
-  {{"word": "VARIABLE", "hint": "A container that stores data values in programming"}}
+  {{
+    "word": "VARIABLE",
+    "hint": "A named storage location for a value"
+  }}
 ]
 
-Rules:
-- Words must be UPPERCASE
-- Words must be single words only (no spaces)
-- Words must be between 4 and 12 characters
-- Hints must be clear definitions a student can understand
-- Return ONLY the JSON array, no extra text
+RULES:
+
+- Words must be UPPERCASE.
+- Words must contain only letters.
+- Words must be single words.
+- No spaces.
+- No hyphens.
+- Words must be 4 to 12 characters.
+- Words must be directly related to the topic.
+- Hints must help the student without
+  directly revealing the word.
+- Avoid obscure or irrelevant words.
+- Avoid duplicate words.
+- Return ONLY the JSON array.
 """
+
     return call_llm(prompt)
 
 
-def generate_crossword_words(topic: str, use_pdf: bool, num_words: int) -> list:
-    context = get_context(topic, use_pdf)
+# =========================================================
+# CROSSWORD
+# =========================================================
+
+def generate_crossword_words(
+    topic: str,
+    use_pdf: bool,
+    num_words: int,
+    db: Session | None = None,
+    pdf_id: int | None = None
+) -> list:
+
+    context = get_context(
+        topic,
+        use_pdf,
+        db,
+        pdf_id
+    )
 
     prompt = f"""
-You are a crossword puzzle generator for students.
+You are an expert educational
+crossword puzzle generator.
 
-Context: {context}
-Topic: {topic}
+The student is currently learning:
 
-Generate exactly {num_words} words for a crossword puzzle.
-Return ONLY a JSON array like this:
+{topic}
+
+Use the following content as your
+primary source:
+
+{context}
+
+Generate exactly {num_words} words
+for a crossword puzzle.
+
+Each word must be an important
+concept or term related to:
+
+{topic}
+
+Return ONLY a JSON array:
+
 [
-  {{"word": "PYTHON", "clue": "Popular programming language named after a snake"}},
-  {{"word": "LOOP", "clue": "A programming construct that repeats code"}},
-  {{"word": "DATA", "clue": "Information stored and processed by a computer"}}
+  {{
+    "word": "REACTION",
+    "clue": "A process in which substances change"
+  }}
 ]
 
-Rules:
-- Words must be UPPERCASE single words only
-- Words must be between 3 and 10 characters
-- Clues must be short and clear (under 60 characters)
-- Words should be able to intersect (share common letters)
-- Return ONLY the JSON array, no extra text
+RULES:
+
+- Words must be UPPERCASE.
+- Words must contain only letters.
+- Words must be single words.
+- No spaces.
+- No hyphens.
+- Words must be 3 to 10 characters.
+- Clues must be short and clear.
+- Clues must not directly contain the answer.
+- Words must be related to the topic.
+- Avoid duplicate words.
+- Prefer words that share letters with
+  other generated words.
+- Return ONLY the JSON array.
 """
+
     return call_llm(prompt)

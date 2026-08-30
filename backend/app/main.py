@@ -10,8 +10,7 @@ from app.models.pdf import PDF
 from app.models.pdf_chunk import PDFChunk
 from app.models.chat_session import ChatSession
 from app.routes import notes
-from app.routes import flashcards
-
+from app.models.learning_topic import LearningTopic
 from app.routes.study_routes import router as study_router
 # Import routes
 from app.routes import (
@@ -51,7 +50,6 @@ app.include_router(session.router)
 app.include_router(game.router)
 # app.include_router(tts.router)
 app.include_router(notes.router)
-app.include_router(flashcards.router)
 app.include_router(study_router)
 
 @app.get("/")
