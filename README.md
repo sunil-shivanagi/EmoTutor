@@ -1,28 +1,28 @@
-# EmoTutor 🧠📚
+# EmoTutor 
 
 > **An emotion-aware AI tutoring platform that adapts learning support to the student's current state.**
 
 EmoTutor is a full-stack AI learning application built with a Python/FastAPI backend and a browser-based HTML/CSS/JavaScript frontend. It combines conversational AI, facial-state detection, PDF-based semantic retrieval, learning-topic tracking, quizzes, educational games, study sessions, notes, and text-to-speech.
 
-## ✨ Features
+##  Features
 
-- 🤖 AI conversational tutor powered through the Groq API.
-- 😊 Facial-state detection using a trained ResNet18 model, PyTorch/TorchVision, MediaPipe Face Mesh and OpenCV.
-- 😴 Separate drowsiness detection using Eye Aspect Ratio (EAR) from MediaPipe landmarks.
-- 🧑‍🏫 Adaptive explanations based on Positive, Negative, Drowsy and Neutral states.
-- 📄 PDF upload and document-grounded learning.
-- 🔎 Semantic PDF retrieval using Sentence Transformers (`all-MiniLM-L6-v2`) and database-stored embeddings.
-- 🧠 LLM-based learning-topic analysis: `none`, `continue`, `new`, or `existing`.
-- 🧪 AI-generated quizzes.
-- 🎮 Educational Hangman and Crossword generation.
-- 📝 AI-generated study notes.
-- 💬 Persistent chat and learning sessions.
-- 🔊 ElevenLabs backend TTS plus browser SpeechSynthesis support.
-- 🔐 JWT authentication and bcrypt password hashing.
-- 🗄️ PostgreSQL database through SQLAlchemy ORM.
-- 🐳 Dockerized backend.
+- AI conversational tutor powered through the Groq API.
+-  Facial-state detection using a trained ResNet18 model, PyTorch/TorchVision, MediaPipe Face Mesh and OpenCV.
+-  Separate drowsiness detection using Eye Aspect Ratio (EAR) from MediaPipe landmarks.
+-  Adaptive explanations based on Positive, Negative, Drowsy and Neutral states.
+-  PDF upload and document-grounded learning.
+-  Semantic PDF retrieval using Sentence Transformers (`all-MiniLM-L6-v2`) and database-stored embeddings.
+-  LLM-based learning-topic analysis: `none`, `continue`, `new`, or `existing`.
+-  AI-generated quizzes.
+-  Educational Hangman and Crossword generation.
+-  AI-generated study notes.
+-  Persistent chat and learning sessions.
+-  ElevenLabs backend TTS plus browser SpeechSynthesis support.
+-  JWT authentication and bcrypt password hashing.
+-  PostgreSQL database through SQLAlchemy ORM.
+-  Dockerized backend.
 
-## 🏗️ System Architecture
+##  System Architecture
 
 ```text
                          ┌──────────────────────────┐
@@ -72,7 +72,7 @@ EmoTutor is a full-stack AI learning application built with a Python/FastAPI bac
                  └─────────────────────────┘
 ```
 
-## 🔄 AI Tutor Flow
+##  AI Tutor Flow
 
 ```text
 Student question
@@ -98,7 +98,7 @@ Save chat/session/topic information
 Return response to frontend
 ```
 
-## 🧠 Emotion & Drowsiness Pipeline
+##  Emotion & Drowsiness Pipeline
 
 ```text
 Camera frame
@@ -128,7 +128,7 @@ Face landmarks
 
 The current `config.json` maps `happy` and `neutral` to **Positive**, and `sad` and `disgust` to **Negative**. Drowsiness is handled separately by EAR and is not a third ResNet class. The model is a ResNet18 with a 2-output head stored as `backend/app/models/final_emotion.pth`. fileciteturn7file0L2-L6 fileciteturn8file0L2-L6
 
-## 🧑‍🏫 Adaptive Teaching
+##  Adaptive Teaching
 
 The detected state changes the LLM system instructions:
 
@@ -141,7 +141,7 @@ The detected state changes the LLM system instructions:
 
 This behavior is implemented in the LLM service. fileciteturn10file0L2-L3
 
-## 🤖 Generative AI Layer
+##  Generative AI Layer
 
 The Groq API and `openai/gpt-oss-120b` are used for multiple tasks:
 
@@ -155,7 +155,7 @@ The topic service uses conversation history, current topic, previous topics and 
 
 The LLM service also supports streaming responses. fileciteturn13file1L20-L32
 
-## 📄 PDF / RAG-Style Pipeline
+##  PDF / RAG-Style Pipeline
 
 The repository implements a RAG-style document pipeline:
 
@@ -192,7 +192,7 @@ Grounded tutor / quiz / game response
 
 The important architecture detail is that the current implementation calculates similarity directly against embeddings stored in the database using NumPy. **FAISS is present in `requirements.txt`, but it is not currently the active retrieval engine.** fileciteturn20file0L2-L7
 
-## 🎮 Educational Games
+##  Educational Games
 
 The game service can use PDF context and the LLM to generate:
 
@@ -201,7 +201,7 @@ The game service can use PDF context and the LLM to generate:
 
 The generated game data is requested as structured JSON for frontend rendering. fileciteturn21file0L2-L7
 
-## 🔊 Text-to-Speech
+##  Text-to-Speech
 
 Two speech approaches exist:
 
@@ -210,7 +210,7 @@ Two speech approaches exist:
 
 The backend TTS service calls the ElevenLabs API and returns generated audio bytes. fileciteturn24file0L2-L6
 
-## 🔐 Authentication & Database
+##  Authentication & Database
 
 Authentication uses JWT-based authorization and bcrypt password hashing through Passlib. fileciteturn22file13L229-L236
 
@@ -228,7 +228,7 @@ User
              └── PDF Chunks + Embeddings
 ```
 
-## 🛠️ Technology Stack
+##  Technology Stack
 
 ### Frontend
 
@@ -288,7 +288,7 @@ FastAPI registers routes for auth, chat, PDF, quiz, emotion, session, game, note
 
 The Dockerfile installs Linux libraries needed by OpenCV/MediaPipe, installs Python dependencies, exposes port 8000 and starts Uvicorn. fileciteturn9file0L2-L6
 
-## 📁 Repository Structure
+##  Repository Structure
 
 ```text
 EmoTutor/
@@ -348,7 +348,7 @@ EmoTutor/
 
 The repository contains a roughly **44.8 MB** trained model file `final_emotion.pth`. fileciteturn17file0L2-L2
 
-## 🚀 Getting Started
+##  Getting Started
 
 ### Prerequisites
 
@@ -431,7 +431,7 @@ python -m http.server 5500
 
 Open `http://127.0.0.1:5500` and ensure the frontend API URL points to the backend.
 
-## 🐳 Docker
+##  Docker
 
 ```bash
 cd backend
@@ -441,7 +441,7 @@ docker run -p 8000:8000 --env-file .env emotutor-backend
 
 PostgreSQL still needs to be reachable using `DATABASE_URL`.
 
-## 🔑 Environment Variables
+##  Environment Variables
 
 | Variable | Purpose |
 |---|---|
@@ -451,7 +451,7 @@ PostgreSQL still needs to be reachable using `DATABASE_URL`.
 | `SECRET_KEY` | JWT security |
 | `ALGORITHM` | JWT algorithm configuration |
 
-## ⚠️ Important Implementation Notes
+##  Important Implementation Notes
 
 ### Emotion model
 
@@ -469,7 +469,7 @@ Do **not** claim FAISS is currently the active vector database. `faiss-cpu` exis
 
 The current FastAPI application allows all origins. For production, restrict CORS to the actual frontend origin. fileciteturn11file0L2-L8
 
-## 🔒 Recommended Production Improvements
+##  Recommended Production Improvements
 
 - Restrict CORS.
 - Add rate limiting for LLM and upload endpoints.
@@ -485,7 +485,7 @@ The current FastAPI application allows all origins. For production, restrict COR
 - Add temporal smoothing/confidence scoring for emotion detection.
 - Add source/page citations to PDF-grounded answers.
 
-## 🔮 Future Improvements
+##  Future Improvements
 
 - More emotion classes and a better-trained emotion model.
 - More robust temporal drowsiness detection.
